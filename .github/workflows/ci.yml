@@ -1,0 +1,42 @@
+name: CI
+on: [pull_request]
+
+jobs:
+  backend:
+    name: build backend
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: "6.0.x"
+      - name: Install dependencies
+        working-directory: ./Codigo/Backend/
+        run: dotnet restore
+      - name: Build
+        working-directory: ./Codigo/Backend/PharmaGo.WebApi/
+        run: dotnet build
+      - name: Test with the dotnet CLI
+        working-directory: ./Codigo/Backend/PharnaGo.Test/
+        run: dotnet test
+
+  frontend:
+    name: build frontend
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        nodeversion: ["16.x"]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        working-directory: ./Codigo/Frontend/
+        run: npm ci
+
+      - name: build angular app
+        working-directory: ./Codigo/Frontend/
+        run: npm run build
