@@ -23,7 +23,7 @@ namespace PharmaGo.BusinessLogic
             Regex rgUserCode = new(validUserCode);
             string validEmail = @"^([\w\.\-]+)@([\w\-]+)((\.(\w){2,3})+)$";
             Regex rgEmail = new(validEmail);
-            string validPassword = @"^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[#?!@$%^&.*-]).{8,}$";
+            string validPassword = @"^(?=.*[A-Za-z0-9])(?=.*[\W_]).{8,}$";
             Regex rgPassword = new(validPassword);
 
             if (String.IsNullOrEmpty(UserName)) throw new InvalidResourceException("Invalid Username");
