@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ArrayOfDrugExportationModel xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <DrugExportationModel>
+    <Code>XDEA</Code>
+    <Name>Novemina</Name>
+    <Symptom>Dolor de cabeza</Symptom>
+    <Deleted>true</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>ABCD</Code>
+    <Name>Perifar Flex</Name>
+    <Symptom>Fiebre</Symptom>
+    <Deleted>true</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>ZASW</Code>
+    <Name>Aspirina</Name>
+    <Symptom>Dolor en general</Symptom>
+    <Deleted>true</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>BIO</Code>
+    <Name>Bio Grip Plus 8 Comprimidos</Name>
+    <Symptom>Gripe</Symptom>
+    <Deleted>true</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>ASCX</Code>
+    <Name>aaaaa</Name>
+    <Symptom>eeeeeeee</Symptom>
+    <Deleted>true</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>ZXZ</Code>
+    <Name>qwewr</Name>
+    <Symptom>asdda</Symptom>
+    <Deleted>true</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>WWW</Code>
+    <Name>asdasasfasf</Name>
+    <Symptom>sadsadasd</Symptom>
+    <Deleted>true</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>GFR</Code>
+    <Name>Novemina Fuerte</Name>
+    <Symptom>Dolor general</Symptom>
+    <Deleted>false</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>VGT</Code>
+    <Name>Paracetamol 1 Gr 10 Comprimidos </Name>
+    <Symptom>Gripe, Fiebre, Dolor de cabeza</Symptom>
+    <Deleted>false</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>ZAQ</Code>
+    <Name>Teofilina Efa 250 Mg 30 Comprimidos</Name>
+    <Symptom>Metilxantina broncodilatadora indicada en las crisis asmáticas y otras situaciones que cursen con broncoespasmo.</Symptom>
+    <Deleted>false</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>FRE</Code>
+    <Name>Alerfedine 120 Mg 10</Name>
+    <Symptom>Antialérgico.</Symptom>
+    <Deleted>false</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>JBT</Code>
+    <Name>Mucotosil Adultos Jarabe 120 Ml</Name>
+    <Symptom>Mucolítico</Symptom>
+    <Deleted>false</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>a</Code>
+    <Name>a</Name>
+    <Symptom>a</Symptom>
+    <Deleted>false</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>b</Code>
+    <Name>b</Name>
+    <Symptom>b</Symptom>
+    <Deleted>false</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>c</Code>
+    <Name>c</Name>
+    <Symptom>c</Symptom>
+    <Deleted>true</Deleted>
+  </DrugExportationModel>
+  <DrugExportationModel>
+    <Code>v</Code>
+    <Name>v</Name>
+    <Symptom>v</Symptom>
+    <Deleted>true</Deleted>
+  </DrugExportationModel>
+</ArrayOfDrugExportationModel>
