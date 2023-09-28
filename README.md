@@ -9,3 +9,7 @@
 ### Primer Entrega
 
 - Ruta a la documentación: Documentacion/Entregas ISA2/Entrega 1
+
+### Segunda Entrega
+
+- Ruta a la documentación: Documentacion/Entregas ISA2/Entrega 2
