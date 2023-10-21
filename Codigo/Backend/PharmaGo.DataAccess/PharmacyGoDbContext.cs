@@ -29,13 +29,11 @@ namespace PharmaGo.DataAccess
             modelBuilder.Entity<Drug>().Property(property => property.Price).HasPrecision(14, 2);
             modelBuilder.Entity<Purchase>().Property(property => property.TotalAmount).HasPrecision(14, 2);
             modelBuilder.Entity<PurchaseDetail>().Property(property => property.Price).HasPrecision(14, 2);
-
+            modelBuilder.Entity<Product>().Property(property => property.Price).HasPrecision(14, 2);
             modelBuilder.Entity<UnitMeasure>().Property(u => u.Name).HasConversion<string>();
             modelBuilder.Entity<Presentation>().Property(u => u.Name).HasConversion<string>();
 
             base.OnModelCreating(modelBuilder);
-
         }
-
     }
 }
