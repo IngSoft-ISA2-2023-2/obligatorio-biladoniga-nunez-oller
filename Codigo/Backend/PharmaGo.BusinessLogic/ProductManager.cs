@@ -25,5 +25,10 @@ namespace PharmaGo.BusinessLogic
             _productRepository.UpdateOne(productSaved);
             _productRepository.Save();
         }
+
+        public List<Product> GetProducts()
+        {
+            throw new NotImplementedException();
+        }
     }
 }

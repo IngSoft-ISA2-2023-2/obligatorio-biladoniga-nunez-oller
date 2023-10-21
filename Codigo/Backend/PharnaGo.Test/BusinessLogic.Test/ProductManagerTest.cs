@@ -55,5 +55,15 @@ namespace PharmaGo.Test.BusinessLogic.Test
             _productRepository.VerifyAll();
         }
 
+
+        [TestMethod]
+        public void GetProducts()
+        {
+            _productRepository.Setup(r => r.GetAllByExpression(It.IsAny<Expression<Func<Product, bool>>>())).Returns(new List<Product>());
+
+            var products = _productManager.GetProducts();
+
+            Assert.IsInstanceOfType(products, typeof(List<Product>));
+        }
     }
 }
