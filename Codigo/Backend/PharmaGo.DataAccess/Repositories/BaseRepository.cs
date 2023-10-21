@@ -19,7 +19,7 @@ namespace PharmaGo.DataAccess.Repositories
             return _context.Set<T>().Where(expression);
         }
 
-        public virtual T GetOneByExpression(Expression<Func<T, bool>> expression)
+        public virtual T GetOneByExpression(Expression<Func<T, bool>> expression) 
         {
             return _context.Set<T>().FirstOrDefault(expression);
         }
