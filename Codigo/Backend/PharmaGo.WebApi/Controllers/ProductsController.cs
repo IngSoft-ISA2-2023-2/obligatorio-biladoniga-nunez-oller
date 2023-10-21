@@ -19,7 +19,9 @@ namespace PharmaGo.WebApi.Controllers
         [HttpGet]
         public IActionResult GetProducts()
         {
-            throw new NotImplementedException();
+            var products = _productsManager.GetProducts();
+
+            return Ok(products.Select(p => new ProductModelOut(p)));
         }
     }
 }
