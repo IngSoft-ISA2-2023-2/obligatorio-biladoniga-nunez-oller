@@ -31,9 +31,7 @@ namespace PharmaGo.WebApi.Controllers
         [AuthorizationFilter(new string[] { nameof(RoleType.Employee) })]
         public IActionResult UpdateProduct([FromBody] UpdateProductModelIn modelIn)
         {
-            var updatedProduct = _productsManager.UpdateProduct(modelIn.ToEntity());
-
-            return Ok(updatedProduct);
+            throw new NotImplementedException();
         }
     }
 }

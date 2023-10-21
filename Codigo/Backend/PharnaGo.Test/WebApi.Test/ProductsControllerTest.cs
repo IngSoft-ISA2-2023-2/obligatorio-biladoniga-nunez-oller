@@ -47,5 +47,26 @@ namespace PharmaGo.Test.WebApi.Test
             //Assert
             Assert.IsInstanceOfType(value, typeof(IEnumerable<ProductModelOut>));
         }
+
+
+        [TestMethod]
+        public void UpdateProductOk()
+        {
+            //Arrange
+            _productsManagerMock
+                .Setup(service => service.UpdateProduct(It.IsAny<Product>()))
+                .Returns(new Product());
+
+            //Act
+            var result = _productsController.UpdateProduct(new UpdateProductModelIn());
+
+            //Assert
+            var objectResult = result as OkObjectResult;
+            var statusCode = objectResult.StatusCode;
+            var value = objectResult.Value;
+
+            //Assert
+            Assert.IsInstanceOfType(value, typeof(ProductModelOut));
+        }
     }
 }

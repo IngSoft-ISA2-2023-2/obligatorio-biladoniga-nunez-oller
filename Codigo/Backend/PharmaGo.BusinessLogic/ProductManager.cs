@@ -32,5 +32,10 @@ namespace PharmaGo.BusinessLogic
 
             return products.ToList();
         }
+
+        public Product UpdateProduct(Product product)
+        {
+            throw new NotImplementedException();
+        }
     }
 }
