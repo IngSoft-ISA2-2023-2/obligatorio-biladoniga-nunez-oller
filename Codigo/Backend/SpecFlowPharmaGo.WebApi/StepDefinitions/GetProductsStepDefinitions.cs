@@ -12,7 +12,7 @@ namespace SpecFlowPharmaGo.WebApi.StepDefinitions
             this.context = context;
         }
 
-        [When("I perform a simple products request")]
+        [When("perform a simple products request")]
         public async Task WhenIPerformASimpleProductsRequest()
         {
             HttpClientHandler clientHandler = new HttpClientHandler();

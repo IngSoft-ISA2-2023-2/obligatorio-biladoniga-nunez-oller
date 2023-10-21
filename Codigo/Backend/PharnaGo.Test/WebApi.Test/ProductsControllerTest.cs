@@ -13,12 +13,12 @@ namespace PharmaGo.Test.WebApi.Test
     public class ProductsControllerTest
     {
         private ProductsController _productsController;
-        private Mock<IProductsManager> _productsManagerMock;
+        private Mock<IProductManager> _productsManagerMock;
 
         [TestInitialize]
         public void SetUp()
         {
-            _productsManagerMock = new Mock<IProductsManager>(MockBehavior.Strict);
+            _productsManagerMock = new Mock<IProductManager>(MockBehavior.Strict);
             _productsController = new ProductsController(_productsManagerMock.Object);
         }
 

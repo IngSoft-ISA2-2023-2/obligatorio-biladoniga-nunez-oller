@@ -7,5 +7,5 @@ Para poder ver su código, nombre, descripción y precio
 
 @mytag
 Scenario: Get the list of all products
-	When I perform a simple products request
+	When perform a simple products request
 	Then return a list of products

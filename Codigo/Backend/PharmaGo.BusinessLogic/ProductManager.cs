@@ -28,7 +28,7 @@ namespace PharmaGo.BusinessLogic
 
         public List<Product> GetProducts()
         {
-            var products = _productRepository.GetAllByExpression(_ => true);
+            var products = _productRepository.GetAllByExpression(p => !p.Deleted);
 
             return products.ToList();
         }
