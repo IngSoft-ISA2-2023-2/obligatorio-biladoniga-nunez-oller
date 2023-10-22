@@ -55,10 +55,9 @@ namespace PharmaGo.Test.BusinessLogic.Test
             pharmacy = new Pharmacy() { Id = 1, Name = "pharmacy", Address = "address", Users = new List<User>() };
             productModel = new ProductModel()
             {
-                Code = 6514,
+                Code = 65141,
                 Name = "name",
                 Price = 200,
-                PharmacyName = "pharmacy",
                 Description = "test"
             };
             session = new Session { Id = 1, Token = new Guid(token), UserId = 1 };

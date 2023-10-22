@@ -18,5 +18,11 @@ namespace PharmaGo.DataAccess.Repositories
         {
             _context = context;
         }
+
+        public override void InsertOne(Product product)
+        {
+            _context.Entry(product).State = EntityState.Added;
+            _context.Set<Product>().Add(product);
+        }
     }
 }

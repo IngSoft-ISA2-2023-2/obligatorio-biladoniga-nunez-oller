@@ -30,6 +30,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Update="Features\InsertProduct.feature.cs">
+      <DependentUpon>InsertProduct.feature</DependentUpon>
+    </Compile>
     <Compile Update="Features\UpdateProduct.feature.cs">
       <DependentUpon>UpdateProduct.feature</DependentUpon>
     </Compile>
@@ -37,6 +40,7 @@
 
   <ItemGroup>
     <SpecFlowFeatureFiles Update="Features\GetProducts - Copia.feature">
+    <SpecFlowFeatureFiles Update="Features\InsertProduct.feature">
       <Visible>$(UsingMicrosoftNETSdk)</Visible>
       <CodeBehindFile>%(RelativeDir)%(Filename).feature$(DefaultLanguageSourceExtension)</CodeBehindFile>
     </SpecFlowFeatureFiles>
