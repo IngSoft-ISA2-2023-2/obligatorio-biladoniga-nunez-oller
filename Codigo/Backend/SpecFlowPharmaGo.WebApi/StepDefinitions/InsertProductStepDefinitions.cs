@@ -60,11 +60,13 @@ namespace SpecFlowPharmaGo.WebApi.StepDefinitions
             clientHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => { return true; };
             var client = new HttpClient(clientHandler);
             client.DefaultRequestHeaders.Add("Authorization", "e9e0e1e9-3812-4eb5-949e-ae92ac931401");
-            var request1 = new HttpRequestMessage(HttpMethod.Delete, $"https://localhost:7186/api/products/1");
-            var request2 = new HttpRequestMessage(HttpMethod.Delete, $"https://localhost:7186/api/products/2");
-            var request3 = new HttpRequestMessage(HttpMethod.Delete, $"https://localhost:7186/api/products/3");
-            var request4 = new HttpRequestMessage(HttpMethod.Delete, $"https://localhost:7186/api/products/4");
 
+            for (var i = 0; i < 20; i++)
+            {
+                var request1 =  new HttpRequestMessage(HttpMethod.Delete, $"https://localhost:7186/api/products/{i}");
+                var response1 = await client.SendAsync(request1).ConfigureAwait(false);
+
+            }
             string requestBody = JsonConvert.SerializeObject(_productModel);
 
             var request = new HttpRequestMessage(HttpMethod.Post, $"https://localhost:7186/api/products");
