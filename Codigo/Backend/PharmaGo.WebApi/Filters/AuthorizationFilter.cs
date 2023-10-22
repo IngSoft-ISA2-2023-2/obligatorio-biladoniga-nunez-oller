@@ -25,7 +25,7 @@ namespace PharmaGo.WebApi.Filters
             string token = context.HttpContext.Request.Headers["Authorization"];
             if (String.IsNullOrEmpty(token) || !_loginManager.IsTokenValid(token))
             {
-                context.Result = new JsonResult(new { Message = "Invalid authorization token" })
+                context.Result = new JsonResult(new { Message = $"Invalid authorization token" })
                 { StatusCode = 401 };
             } else if (!_loginManager.IsRoleValid(_roles, token))
             {

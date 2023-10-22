@@ -38,7 +38,6 @@ namespace PharmaGo.Test.BusinessLogic.Test
             _sessionRepository = new Mock<IRepository<Session>>();
             _pharmacyRepository = new Mock<IRepository<Pharmacy>>();
             _productManager = new ProductManager(_productRepository.Object, _sessionRepository.Object, _userRepository.Object, _pharmacyRepository.Object );
-            
             pharmacy = new Pharmacy() { Id = 1, Name = "pharmacy", Address = "address", Users = new List<User>() };
             product = new Product()
             {
@@ -53,15 +52,7 @@ namespace PharmaGo.Test.BusinessLogic.Test
             session = new Session { Id = 1, Token = new Guid(token), UserId = 1 };
             user = new User() { Id = 1, UserName = "test", Email = "test@gmail.com", Address = "test" };
             nullProduct = null;
-
-
-                
-               
-               
-             
             pharmacy = new Pharmacy() { Id = 1, Name = "pharmacy", Address = "address", Users = new List<User>() };
-         
-           
             productModel = new ProductModel()
             {
                 Code = 6514,
@@ -70,8 +61,6 @@ namespace PharmaGo.Test.BusinessLogic.Test
                 PharmacyName = "pharmacy",
                 Description = "test"
             };
-          
-           
             session = new Session { Id = 1, Token = new Guid(token), UserId = 1 };
             user = new User() { Id = 1, UserName = "test", Email = "test@gmail.com", Address = "test" };
         }
@@ -95,6 +84,31 @@ namespace PharmaGo.Test.BusinessLogic.Test
             _productRepository.VerifyAll();
         }
 
+        [TestMethod]
+        public void GetProducts()
+        {
+            _productRepository.Setup(r => r.GetAllByExpression(It.IsAny<Expression<Func<Product, bool>>>())).Returns(new List<Product>());
+
+            var products = _productManager.GetProducts();
+
+            Assert.IsInstanceOfType(products, typeof(List<Product>));
+        }
+
+        [TestMethod]
+        public void UpdateProduct()
+        {
+            _productRepository.Setup(r => r.GetOneByExpression(It.IsAny<Expression<Func<Product, bool>>>())).Returns(new Product());
+            _productRepository.Setup(r => r.UpdateOne(It.IsAny<Product>()));
+
+            var product = _productManager.UpdateProduct(0, new Product()
+            {
+                Description = "Test",
+                Price = 10,
+                Name = "Test"
+            });
+
+            Assert.IsInstanceOfType(product, typeof(Product));
+        }
 
         [TestMethod]
         public void CreateProductOk()
@@ -139,8 +153,5 @@ namespace PharmaGo.Test.BusinessLogic.Test
             _pharmacyRepository.Setup(r => r.GetOneByExpression(It.IsAny<Expression<Func<Pharmacy, bool>>>())).Returns(nullPharmacy);
             var drugReturned = _productManager.Create(product, token);
         }
-
-
-
     }
 }

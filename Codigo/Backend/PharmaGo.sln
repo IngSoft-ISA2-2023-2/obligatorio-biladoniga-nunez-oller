@@ -29,7 +29,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ExportationModel", "Exporta
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JSONExporter", "JSONExporter\JSONExporter.csproj", "{FADD2A7B-537F-4142-9028-10EF0967DA46}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XMLExporter", "XMLExporter\XMLExporter.csproj", "{6975A2F8-1659-40EA-B9E1-1C1EE8464EF6}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XMLExporter", "XMLExporter\XMLExporter.csproj", "{6975A2F8-1659-40EA-B9E1-1C1EE8464EF6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpecFlowPharmaGo.WebApi", "SpecFlowPharmaGo.WebApi\SpecFlowPharmaGo.WebApi.csproj", "{D0544C55-0209-4FA1-B6BD-1E944E996609}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -85,6 +87,10 @@ Global
 		{6975A2F8-1659-40EA-B9E1-1C1EE8464EF6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6975A2F8-1659-40EA-B9E1-1C1EE8464EF6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6975A2F8-1659-40EA-B9E1-1C1EE8464EF6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D0544C55-0209-4FA1-B6BD-1E944E996609}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D0544C55-0209-4FA1-B6BD-1E944E996609}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D0544C55-0209-4FA1-B6BD-1E944E996609}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D0544C55-0209-4FA1-B6BD-1E944E996609}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
