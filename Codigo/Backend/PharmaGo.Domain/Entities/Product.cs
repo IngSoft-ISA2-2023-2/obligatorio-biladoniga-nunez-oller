@@ -1,4 +1,5 @@
 ﻿using PharmaGo.Exceptions;
+using System;
 using System.Collections.Generic;
 
 namespace PharmaGo.Domain.Entities
@@ -16,7 +17,9 @@ namespace PharmaGo.Domain.Entities
         public void ValidOrFail()
         {
             if (string.IsNullOrEmpty(Name) || string.IsNullOrEmpty(Description)
-                     || Price <= 0 || Code <=0)
+                     || Price <= 0 || Code <=0 || Code.ToString().Length != 5 ||
+                     Name.Length > 30 || Description.Length > 70
+                     )
             {
                 throw new InvalidResourceException("The Product is not correctly created.");
             }

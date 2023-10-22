@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using NuGet.Protocol;
+using PharmaGo.BusinessLogic;
+using PharmaGo.Domain.Entities;
 using PharmaGo.IBusinessLogic;
 using PharmaGo.WebApi.Enums;
 using PharmaGo.WebApi.Filters;
@@ -44,6 +46,15 @@ namespace PharmaGo.WebApi.Controllers
             _productsManager.Delete(id);
 
             return Ok();
+        }
+        [HttpPost]
+        [AuthorizationFilter(new string[] { nameof(RoleType.Employee) })]
+        public IActionResult Create([FromBody] ProductModel productModel)
+        {
+            string token = HttpContext.Request.Headers["Authorization"];
+            Product productCreated = _productsManager.Create(productModel.ToEntity(), token);
+            ProductModelOut productResponse = new ProductModelOut(productCreated);
+            return Ok(productResponse);
         }
     }
 }

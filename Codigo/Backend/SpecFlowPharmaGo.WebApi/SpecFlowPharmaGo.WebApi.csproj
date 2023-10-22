@@ -7,8 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <SpecFlowObsoleteCodeBehindFiles Remove="Features\GetProducts - Copia.feature.cs" />
-    <SpecFlowObsoleteCodeBehindFiles Remove="Features\GetProducts - Copy.feature.cs" />
+    <SpecFlowObsoleteCodeBehindFiles Remove="Features\GetProducts.feature.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -30,20 +29,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Update="Features\InsertProduct.feature.cs">
+      <DependentUpon>InsertProduct.feature</DependentUpon>
+    </Compile>
     <Compile Update="Features\UpdateProduct.feature.cs">
       <DependentUpon>UpdateProduct.feature</DependentUpon>
     </Compile>
   </ItemGroup>
 
-  <ItemGroup>
-    <SpecFlowFeatureFiles Update="Features\GetProducts - Copia.feature">
-      <Visible>$(UsingMicrosoftNETSdk)</Visible>
-      <CodeBehindFile>%(RelativeDir)%(Filename).feature$(DefaultLanguageSourceExtension)</CodeBehindFile>
-    </SpecFlowFeatureFiles>
-    <SpecFlowFeatureFiles Update="Features\UpdateProduct.feature">
-      <Visible>$(UsingMicrosoftNETSdk)</Visible>
-      <CodeBehindFile>%(RelativeDir)%(Filename).feature$(DefaultLanguageSourceExtension)</CodeBehindFile>
-    </SpecFlowFeatureFiles>
-  </ItemGroup>
+ 
 
 </Project>

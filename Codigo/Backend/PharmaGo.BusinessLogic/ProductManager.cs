@@ -82,18 +82,18 @@ namespace PharmaGo.BusinessLogic
             var userId = session.UserId;
             User user = _userRepository.GetOneDetailByExpression(u => u.Id == userId);
 
-            Pharmacy pharmacyOfDrug = _pharmacyRepository.GetOneByExpression(p => p.Name == user.Pharmacy.Name);
-            if (pharmacyOfDrug == null)
+            Pharmacy pharmacyOfProduct = _pharmacyRepository.GetOneByExpression(p => p.Name == user.Pharmacy.Name);
+            if (pharmacyOfProduct == null)
             {
-                throw new ResourceNotFoundException("The pharmacy of the drug does not exist.");
+                throw new ResourceNotFoundException("The pharmacy of the product does not exist.");
             }
 
-            if (_productRepository.Exists(d => d.Code == product.Code && d.Pharmacy.Name == pharmacyOfDrug.Name))
+            if (_productRepository.Exists(p => p.Code == product.Code && p.Pharmacy.Name == pharmacyOfProduct.Name && !p.Deleted))
             {
-                throw new InvalidResourceException("The drug already exists in that pharmacy.");
+                throw new InvalidResourceException("The product already exists in that pharmacy.");
             }
            
-            product.Pharmacy.Id = pharmacyOfDrug.Id;
+            product.Pharmacy.Id = pharmacyOfProduct.Id;
             _productRepository.InsertOne(product);
             _productRepository.Save();
             return product;
