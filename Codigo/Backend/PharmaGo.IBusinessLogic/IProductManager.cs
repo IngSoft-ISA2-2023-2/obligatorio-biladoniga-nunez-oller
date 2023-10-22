@@ -6,6 +6,6 @@ namespace PharmaGo.IBusinessLogic
     {
         void Delete(int id);
         List<Product> GetProducts();
-        Product UpdateProduct(Product product);
+        Product UpdateProduct(int id, Product product);
     }
 }

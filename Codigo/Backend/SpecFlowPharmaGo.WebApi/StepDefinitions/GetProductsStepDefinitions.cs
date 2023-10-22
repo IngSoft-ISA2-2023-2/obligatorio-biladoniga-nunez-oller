@@ -19,7 +19,7 @@ namespace SpecFlowPharmaGo.WebApi.StepDefinitions
             clientHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => { return true; };
             var client = new HttpClient(clientHandler);
 
-            var request = new HttpRequestMessage(HttpMethod.Get, $"http://localhost:5186/api/products");
+            var request = new HttpRequestMessage(HttpMethod.Get, $"https://localhost:7186/api/products");
             var response = await client.SendAsync(request).ConfigureAwait(false);
 
             try

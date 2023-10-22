@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using NuGet.Protocol;
 using PharmaGo.IBusinessLogic;
 using PharmaGo.WebApi.Enums;
 using PharmaGo.WebApi.Filters;
@@ -27,11 +28,11 @@ namespace PharmaGo.WebApi.Controllers
             return Ok(products.Select(p => new ProductModelOut(p)));
         }
 
-        [HttpPut]
+        [HttpPut("{id}")]
         [AuthorizationFilter(new string[] { nameof(RoleType.Employee) })]
-        public IActionResult UpdateProduct([FromBody] UpdateProductModelIn modelIn)
+        public IActionResult UpdateProduct([FromRoute] int id, [FromBody] UpdateProductModelIn modelIn)
         {
-            var updatedProduct = _productsManager.UpdateProduct(modelIn.ToEntity());
+            var updatedProduct = _productsManager.UpdateProduct(id, modelIn.ToEntity());
 
             return Ok(new ProductModelOut(updatedProduct));
         }

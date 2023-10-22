@@ -19,7 +19,7 @@ namespace SpecFlowPharmaGo.WebApi.Features
     
     [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
     [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
-    public partial class GetProductsFeature : object, Xunit.IClassFixture<GetProductsFeature.FixtureData>, System.IDisposable
+    public partial class UpdateProductsFeature : object, Xunit.IClassFixture<UpdateProductsFeature.FixtureData>, System.IDisposable
     {
         
         private static TechTalk.SpecFlow.ITestRunner testRunner;
@@ -28,10 +28,10 @@ namespace SpecFlowPharmaGo.WebApi.Features
         
         private Xunit.Abstractions.ITestOutputHelper _testOutputHelper;
         
-#line 1 "GetProducts.feature"
+#line 1 "UpdateProduct.feature"
 #line hidden
         
-        public GetProductsFeature(GetProductsFeature.FixtureData fixtureData, SpecFlowPharmaGo_WebApi_XUnitAssemblyFixture assemblyFixture, Xunit.Abstractions.ITestOutputHelper testOutputHelper)
+        public UpdateProductsFeature(UpdateProductsFeature.FixtureData fixtureData, SpecFlowPharmaGo_WebApi_XUnitAssemblyFixture assemblyFixture, Xunit.Abstractions.ITestOutputHelper testOutputHelper)
         {
             this._testOutputHelper = testOutputHelper;
             this.TestInitialize();
@@ -40,8 +40,8 @@ namespace SpecFlowPharmaGo.WebApi.Features
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "GetProducts", "Narrativa:\r\nComo usuario invitado\r\nQuiero obtener los productos disponibles\r\nPara" +
-                    " poder ver su código, nombre, descripción y precio", ProgrammingLanguage.CSharp, ((string[])(null)));
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "UpdateProducts", "Narrativa:\r\nComo usuario empleado\r\nQuiero modificar el nombre, descripcion y/o pr" +
+                    "ecio\r\nPara mantener los productos actualizados", ProgrammingLanguage.CSharp, ((string[])(null)));
             testRunner.OnFeatureStart(featureInfo);
         }
         
@@ -81,16 +81,25 @@ namespace SpecFlowPharmaGo.WebApi.Features
             this.TestTearDown();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Get the list of all products")]
-        [Xunit.TraitAttribute("FeatureTitle", "GetProducts")]
-        [Xunit.TraitAttribute("Description", "Get the list of all products")]
+        [Xunit.SkippableTheoryAttribute(DisplayName="Update product name")]
+        [Xunit.TraitAttribute("FeatureTitle", "UpdateProducts")]
+        [Xunit.TraitAttribute("Description", "Update product name")]
         [Xunit.TraitAttribute("Category", "mytag")]
-        public virtual void GetTheListOfAllProducts()
+        [Xunit.InlineDataAttribute("1", "product1", new string[0])]
+        [Xunit.InlineDataAttribute("1", "product2", new string[0])]
+        public virtual void UpdateProductName(string id, string name, string[] exampleTags)
         {
-            string[] tagsOfScenario = new string[] {
+            string[] @__tags = new string[] {
                     "mytag"};
+            if ((exampleTags != null))
+            {
+                @__tags = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Concat(@__tags, exampleTags));
+            }
+            string[] tagsOfScenario = @__tags;
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Get the list of all products", null, tagsOfScenario, argumentsOfScenario, this._featureTags);
+            argumentsOfScenario.Add("id", id);
+            argumentsOfScenario.Add("name", name);
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Update product name", null, tagsOfScenario, argumentsOfScenario, this._featureTags);
 #line 9
 this.ScenarioInitialize(scenarioInfo);
 #line hidden
@@ -112,10 +121,16 @@ this.ScenarioInitialize(scenarioInfo);
             {
                 this.ScenarioStart();
 #line 10
- testRunner.When("I perform a simple products request", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+ testRunner.Given(string.Format("The id {0} of the product", id), ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
 #line 11
- testRunner.Then("return a list of products", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+ testRunner.And(string.Format("The name {0} of the product", name), ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 12
+ testRunner.When("try to update a product name", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 13
+ testRunner.Then("return the updated product", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
             this.ScenarioCleanup();
@@ -128,12 +143,12 @@ this.ScenarioInitialize(scenarioInfo);
             
             public FixtureData()
             {
-                GetProductsFeature.FeatureSetup();
+                UpdateProductsFeature.FeatureSetup();
             }
             
             void System.IDisposable.Dispose()
             {
-                GetProductsFeature.FeatureTearDown();
+                UpdateProductsFeature.FeatureTearDown();
             }
         }
     }

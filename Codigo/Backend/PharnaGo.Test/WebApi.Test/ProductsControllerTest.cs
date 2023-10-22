@@ -54,11 +54,11 @@ namespace PharmaGo.Test.WebApi.Test
         {
             //Arrange
             _productsManagerMock
-                .Setup(service => service.UpdateProduct(It.IsAny<Product>()))
+                .Setup(service => service.UpdateProduct(It.IsAny<int>(), It.IsAny<Product>()))
                 .Returns(new Product());
 
             //Act
-            var result = _productsController.UpdateProduct(new UpdateProductModelIn());
+            var result = _productsController.UpdateProduct(0, new UpdateProductModelIn());
 
             //Assert
             var objectResult = result as OkObjectResult;

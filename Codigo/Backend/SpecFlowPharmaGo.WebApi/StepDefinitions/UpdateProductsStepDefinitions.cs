@@ -5,6 +5,8 @@ using TechTalk.SpecFlow;
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Http;
 using System.Net;
+using Newtonsoft.Json.Linq;
+using System.Text;
 
 namespace SpecFlowPharmaGo.WebApi.StepDefinitions
 {
@@ -19,13 +21,13 @@ namespace SpecFlowPharmaGo.WebApi.StepDefinitions
             this.context = context;
         }
 
-        [Given(@"The id ""([^""]*)"" of the product")]
+        [Given(@"The id (.*) of the product")]
         public void GivenTheIdOfTheProduct(string id)
         {
             context.Add("ID", id);
         }
 
-        [Given(@"The name ""([^""]*)"" of the product")]
+        [Given(@"The name (.*) of the product")]
         public void GivenTheNameOfTheProduct(string name)
         {
             _product.Name = name;
@@ -37,19 +39,14 @@ namespace SpecFlowPharmaGo.WebApi.StepDefinitions
             HttpClientHandler clientHandler = new HttpClientHandler();
             clientHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => { return true; };
             var client = new HttpClient(clientHandler);
+            client.DefaultRequestHeaders.Add("Authorization", "e9e0e1e9-3812-4eb5-949e-ae92ac931401");
 
             string requestBody = JsonConvert.SerializeObject(new { Name = _product.Name });
 
-            var request = new HttpRequestMessage(HttpMethod.Put, $"http://localhost:5186/api/products/{context.Get<string>("ID")}")
-            {
-                Content = new StringContent(requestBody)
-                {
-                    Headers =
-                        {
-                          ContentType = new MediaTypeHeaderValue("application/json")
-                        }
-                }
-            };
+            var request = new HttpRequestMessage(HttpMethod.Put, $"https://localhost:7186/api/products/{context.Get<string>("ID")}");
+
+            request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+
             var response = await client.SendAsync(request).ConfigureAwait(false);
 
             try
