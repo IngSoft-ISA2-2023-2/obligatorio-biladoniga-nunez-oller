@@ -12,7 +12,6 @@ namespace PharmaGo.Factory
 {
     public static class ServiceFactory
     {
-
         public static void RegisterBusinessLogicServices(this IServiceCollection serviceCollection, IConfiguration configuration)
         {
             serviceCollection.AddScoped<ILoginManager, LoginManager>();
@@ -44,7 +43,6 @@ namespace PharmaGo.Factory
             serviceCollection.AddScoped<IRepository<PurchaseDetail>, PurchasesDetailRepository>();
             serviceCollection.AddScoped<IRepository<Role>, RoleRepository>();
             serviceCollection.AddScoped<IRepository<Product>, ProductRepository>();
-
             serviceCollection.AddDbContext<DbContext, PharmacyGoDbContext>(o => o.UseSqlServer(configuration.GetConnectionString("PharmaGo")));
         }
 
