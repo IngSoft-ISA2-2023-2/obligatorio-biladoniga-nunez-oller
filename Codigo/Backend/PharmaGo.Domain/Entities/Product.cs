@@ -1,4 +1,7 @@
-﻿namespace PharmaGo.Domain.Entities
+﻿using PharmaGo.Exceptions;
+using System.Collections.Generic;
+
+namespace PharmaGo.Domain.Entities
 {
     public class Product
     {
@@ -10,5 +13,13 @@
         public bool Deleted { get; set; }
         public Pharmacy? Pharmacy { get; set; }
 
+        public void ValidOrFail()
+        {
+            if (string.IsNullOrEmpty(Name) || string.IsNullOrEmpty(Description)
+                     || Price <= 0 || Code <=0)
+            {
+                throw new InvalidResourceException("The Product is not correctly created.");
+            }
+        }
     }
 }
