@@ -1,11 +1,6 @@
-using System;
 using Newtonsoft.Json;
 using PharmaGo.Domain.Entities;
-using TechTalk.SpecFlow;
-using System.Net.Http.Headers;
-using Microsoft.AspNetCore.Http;
 using System.Net;
-using Newtonsoft.Json.Linq;
 using System.Text;
 
 namespace SpecFlowPharmaGo.WebApi.StepDefinitions
@@ -27,13 +22,20 @@ namespace SpecFlowPharmaGo.WebApi.StepDefinitions
             context.Add("ID", id);
         }
 
-        [Given(@"The name (.*) of the product")]
-        public void GivenTheNameOfTheProduct(string name)
+        [Given(@"The ""([^""]*)"" with ""([^""]*)"" of the product")]
+        public void GivenTheWithValueOfTheProduct(string name, dynamic val)
         {
-            _product.Name = name;
+            decimal dec = 0;
+            if (Decimal.TryParse(val, out dec))
+            {
+                typeof(Product).GetProperty(name).SetValue(_product, dec);
+            } else
+            {
+                typeof(Product).GetProperty(name).SetValue(_product, val);
+            }
         }
 
-        [When(@"try to update a product name")]
+        [When(@"try to update the product")]
         public async Task WhenTryToUpdateAProductName()
         {
             HttpClientHandler clientHandler = new HttpClientHandler();
@@ -41,7 +43,7 @@ namespace SpecFlowPharmaGo.WebApi.StepDefinitions
             var client = new HttpClient(clientHandler);
             client.DefaultRequestHeaders.Add("Authorization", "e9e0e1e9-3812-4eb5-949e-ae92ac931401");
 
-            string requestBody = JsonConvert.SerializeObject(new { Name = _product.Name });
+            string requestBody = JsonConvert.SerializeObject(new { Name = _product.Name, Description = _product.Description, Price = _product.Price });
 
             var request = new HttpRequestMessage(HttpMethod.Put, $"https://localhost:7186/api/products/{context.Get<string>("ID")}");
 

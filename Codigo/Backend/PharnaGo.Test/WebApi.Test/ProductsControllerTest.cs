@@ -55,7 +55,15 @@ namespace PharmaGo.Test.WebApi.Test
             //Arrange
             _productsManagerMock
                 .Setup(service => service.UpdateProduct(It.IsAny<int>(), It.IsAny<Product>()))
-                .Returns(new Product());
+                .Returns(new Product()
+                {
+                    Pharmacy = new Pharmacy()
+                    {
+                        Name = "test",
+                        Address = "test",
+                        Id = 0,
+                    }
+                });
 
             //Act
             var result = _productsController.UpdateProduct(0, new UpdateProductModelIn());
@@ -66,7 +74,7 @@ namespace PharmaGo.Test.WebApi.Test
             var value = objectResult.Value;
 
             //Assert
-            Assert.IsInstanceOfType(value, typeof(ProductModelOut));
+            Assert.IsInstanceOfType(value, typeof(UpdateProductModelOut));
         }
     }
 }

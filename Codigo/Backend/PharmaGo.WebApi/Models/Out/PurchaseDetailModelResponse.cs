@@ -14,6 +14,8 @@ namespace PharmaGo.WebApi.Models.Out
         public string PharmacyName { get; set; }
         public string DrugCode { get; set; }
         public string DrugName { get; set; }
+        public int ProductCode { get; set; }
+        public string ProductName { get; set; }
         public PurchaseDetailModelResponse(int id, PurchaseDetail detail) {
             PurchaseId = id;
             PurchaseDetailId = detail.Id;
@@ -22,8 +24,10 @@ namespace PharmaGo.WebApi.Models.Out
             Quantity = detail.Quantity;
             PharmacyId = detail.Pharmacy.Id;
             PharmacyName = detail.Pharmacy.Name;
-            DrugCode = detail.Drug.Code;
-            DrugName = detail.Drug.Name;
+            DrugCode = detail?.Drug?.Code ?? "";
+            DrugName = detail?.Drug?.Name ?? "";
+            ProductCode = detail?.Product?.Code ?? 0;
+            ProductName = detail?.Product?.Name ?? "";
         }
     }
 }

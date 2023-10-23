@@ -19,9 +19,6 @@ namespace SpecFlowPharmaGo.WebApi.StepDefinitions
         public InsertProductStepDefinitions(ScenarioContext context)
         {
             this.context = context;
-
-
-
         }
 
         [Given(@"the name product(.*) of the product")]
@@ -61,12 +58,6 @@ namespace SpecFlowPharmaGo.WebApi.StepDefinitions
             var client = new HttpClient(clientHandler);
             client.DefaultRequestHeaders.Add("Authorization", "e9e0e1e9-3812-4eb5-949e-ae92ac931401");
 
-            for (var i = 0; i < 20; i++)
-            {
-                var request1 =  new HttpRequestMessage(HttpMethod.Delete, $"https://localhost:7186/api/products/{i}");
-                var response1 = await client.SendAsync(request1).ConfigureAwait(false);
-
-            }
             string requestBody = JsonConvert.SerializeObject(_productModel);
 
             var request = new HttpRequestMessage(HttpMethod.Post, $"https://localhost:7186/api/products");
@@ -89,8 +80,5 @@ namespace SpecFlowPharmaGo.WebApi.StepDefinitions
         {
             Assert.Equal(200, (int)context.Get<HttpStatusCode>("ResponseStatusCode"));
         }
-
-
-        
     }
 }

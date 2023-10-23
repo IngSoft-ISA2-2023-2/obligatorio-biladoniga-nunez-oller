@@ -46,7 +46,7 @@ namespace PharmaGo.WebApi.Controllers
         [AuthorizationFilter(new string[] { nameof(RoleType.Employee) })]
         public IActionResult Approve(int id, [FromBody] PurchaseAuthorizationModel model)
         {
-            var purchaseDetail = _purchasesManager.ApprobePurchaseDetail(id, model.pharmacyId, model.drugCode);
+            var purchaseDetail = _purchasesManager.ApprobePurchaseDetail(id, model.pharmacyId, model.drugCode, model.productCode);
             var purchaseDetailModelResponse = new PurchaseDetailModelResponse(id, purchaseDetail);
             return Ok(purchaseDetailModelResponse);
         }
@@ -56,7 +56,7 @@ namespace PharmaGo.WebApi.Controllers
         [AuthorizationFilter(new string[] { nameof(RoleType.Employee) })]
         public IActionResult Reject(int id, [FromBody] PurchaseAuthorizationModel model)
         {
-            var purchaseDetail = _purchasesManager.RejectPurchaseDetail(id, model.pharmacyId, model.drugCode);
+            var purchaseDetail = _purchasesManager.RejectPurchaseDetail(id, model.pharmacyId, model.drugCode, model.productCode);
             var purchaseDetailModelResponse = new PurchaseDetailModelResponse(id, purchaseDetail);
             return Ok(purchaseDetailModelResponse);
         }

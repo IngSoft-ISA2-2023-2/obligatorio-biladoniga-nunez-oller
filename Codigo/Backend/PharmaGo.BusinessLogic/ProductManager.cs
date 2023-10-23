@@ -88,12 +88,12 @@ namespace PharmaGo.BusinessLogic
                 throw new ResourceNotFoundException("The pharmacy of the product does not exist.");
             }
 
-            if (_productRepository.Exists(p => p.Code == product.Code && p.Pharmacy.Name == pharmacyOfProduct.Name && !p.Deleted))
+            if (_productRepository.Exists(p => p.Code == product.Code && p.Pharmacy != null && p.Pharmacy.Name == pharmacyOfProduct.Name && !p.Deleted))
             {
                 throw new InvalidResourceException("The product already exists in that pharmacy.");
             }
-           
-            product.Pharmacy.Id = pharmacyOfProduct.Id;
+
+            product.Pharmacy = pharmacyOfProduct;
             _productRepository.InsertOne(product);
             _productRepository.Save();
             return product;

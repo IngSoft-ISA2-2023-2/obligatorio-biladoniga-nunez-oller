@@ -36,7 +36,7 @@ namespace PharmaGo.WebApi.Controllers
         {
             var updatedProduct = _productsManager.UpdateProduct(id, modelIn.ToEntity());
 
-            return Ok(new ProductModelOut(updatedProduct));
+            return Ok(new UpdateProductModelOut(updatedProduct));
         }
 
         [HttpDelete("{id}")]
@@ -47,6 +47,7 @@ namespace PharmaGo.WebApi.Controllers
 
             return Ok();
         }
+
         [HttpPost]
         [AuthorizationFilter(new string[] { nameof(RoleType.Employee) })]
         public IActionResult Create([FromBody] ProductModel productModel)

@@ -15,16 +15,31 @@ namespace PharmaGo.WebApi.Converters
             purchase.details = new List<PurchaseDetail>();
             foreach (var detail in model.Details)
             {
-                purchase.details
-                    .Add(new PurchaseDetail
-                    {
-                        Quantity = detail.Quantity,
-                        Drug = new Drug { Code = detail.Code },
-                        Pharmacy = new()
+                if (String.IsNullOrEmpty(detail.Code))
+                {
+                    purchase.details
+                        .Add(new PurchaseDetail
                         {
-                            Id = detail.PharmacyId
-                        }
-                    });
+                            Quantity = detail.Quantity,
+                            Product = new Product { Code = detail.ProductCode },
+                            Pharmacy = new()
+                            {
+                                Id = detail.PharmacyId
+                            }
+                        });
+                } else
+                {
+                    purchase.details
+                        .Add(new PurchaseDetail
+                        {
+                            Quantity = detail.Quantity,
+                            Drug = new Drug { Code = detail.Code },
+                            Pharmacy = new()
+                            {
+                                Id = detail.PharmacyId
+                            }
+                        });
+                }
             }
 
             return purchase;

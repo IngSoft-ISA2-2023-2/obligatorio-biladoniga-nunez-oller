@@ -81,13 +81,14 @@ namespace SpecFlowPharmaGo.WebApi.Features
             this.TestTearDown();
         }
         
-        [Xunit.SkippableTheoryAttribute(DisplayName="Update product name")]
+        [Xunit.SkippableTheoryAttribute(DisplayName="Update product attribute")]
         [Xunit.TraitAttribute("FeatureTitle", "UpdateProducts")]
-        [Xunit.TraitAttribute("Description", "Update product name")]
+        [Xunit.TraitAttribute("Description", "Update product attribute")]
         [Xunit.TraitAttribute("Category", "mytag")]
-        [Xunit.InlineDataAttribute("1", "product1", new string[0])]
-        [Xunit.InlineDataAttribute("1", "product2", new string[0])]
-        public virtual void UpdateProductName(string id, string name, string[] exampleTags)
+        [Xunit.InlineDataAttribute("1", "Name", "name1", new string[0])]
+        [Xunit.InlineDataAttribute("1", "Description", "desc1", new string[0])]
+        [Xunit.InlineDataAttribute("1", "Price", "2.2", new string[0])]
+        public virtual void UpdateProductAttribute(string id, string attribute, string value, string[] exampleTags)
         {
             string[] @__tags = new string[] {
                     "mytag"};
@@ -98,8 +99,9 @@ namespace SpecFlowPharmaGo.WebApi.Features
             string[] tagsOfScenario = @__tags;
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             argumentsOfScenario.Add("id", id);
-            argumentsOfScenario.Add("name", name);
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Update product name", null, tagsOfScenario, argumentsOfScenario, this._featureTags);
+            argumentsOfScenario.Add("attribute", attribute);
+            argumentsOfScenario.Add("value", value);
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Update product attribute", null, tagsOfScenario, argumentsOfScenario, this._featureTags);
 #line 9
 this.ScenarioInitialize(scenarioInfo);
 #line hidden
@@ -124,10 +126,10 @@ this.ScenarioInitialize(scenarioInfo);
  testRunner.Given(string.Format("The id {0} of the product", id), ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
 #line 11
- testRunner.And(string.Format("The name {0} of the product", name), ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+ testRunner.And(string.Format("The \"{0}\" with \"{1}\" of the product", attribute, value), ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 12
- testRunner.When("try to update a product name", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+ testRunner.When("try to update the product", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 13
  testRunner.Then("return the updated product", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");

@@ -1,0 +1,44 @@
+<app-user-header title="Administrator" link="admin"></app-user-header>
+<c-container class="mt-3">
+  <c-row [ngStyle]="{ width: '100%' }">
+    <c-col>
+      <c-card
+        [cBorder]="{ top: { color: 'info', width: 3 } }"
+        class="mb-3">
+        <c-row class="g-0">
+          <table
+          cTable
+          hover
+          [responsive]="true">
+          <thead>
+              <tr>
+                  <th scope="col">Pharmacy</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Code</th>
+                  <th scope="col">Description</th>
+                  <th scope="col"></th>
+                </tr>
+          </thead>
+          <tbody *ngFor="let product of products">
+              <tr>
+                  <td>{{ product.pharmacy !== null ? product.pharmacy.name : "" }}</td>
+                  <td>{{ product.name }}</td>
+                  <td>{{ product.code }}</td>
+                  <td>{{ product.description }}</td>
+                  <td>
+                    <button
+                      title="Update"
+                      cButton
+                      color="primary"
+                      (click)="update(product.id)">Update
+                      <svg  cIcon [cIcon]="icons.cilSync"></svg>
+                    </button>
+                  </td>
+              </tr>
+          </tbody>
+          </table>
+        </c-row>
+      </c-card>
+    </c-col>
+  </c-row>
+</c-container>

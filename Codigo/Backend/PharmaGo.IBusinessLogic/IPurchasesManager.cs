@@ -7,8 +7,8 @@ namespace PharmaGo.IBusinessLogic
         public ICollection<Purchase> GetAllPurchases(string token);
         public ICollection<Purchase> GetAllPurchasesByDate(string token, DateTime? start, DateTime? end);
         public Purchase CreatePurchase(Purchase purchase);
-        public PurchaseDetail ApprobePurchaseDetail(int purchaseId, int pharmacyId, string drugCode);
-        public PurchaseDetail RejectPurchaseDetail(int purchaseDetailId, int pharmacyId, string drugCode);
+        public PurchaseDetail ApprobePurchaseDetail(int purchaseId, int pharmacyId, string drugCode, int productCode);
+        public PurchaseDetail RejectPurchaseDetail(int purchaseDetailId, int pharmacyId, string drugCode, int productCode);
         public Purchase GetPurchaseByTrackingCode(string trackingCode);
     }
 }

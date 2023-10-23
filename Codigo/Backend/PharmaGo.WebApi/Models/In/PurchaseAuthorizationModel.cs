@@ -5,6 +5,7 @@
     {
         public int pharmacyId { get; set; }
         public string drugCode { get; set; }
+        public int productCode { get; set; }
 
     }
 }
