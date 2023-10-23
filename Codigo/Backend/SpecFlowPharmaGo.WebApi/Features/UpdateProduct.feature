@@ -6,13 +6,14 @@ Quiero modificar el nombre, descripcion y/o precio
 Para mantener los productos actualizados
 
 @mytag
-Scenario: Update product name
+Scenario: Update product attribute
 	Given The id <id> of the product
-	And The name <name> of the product
-	When try to update a product name
+	And The "<attribute>" with "<value>" of the product
+	When try to update the product
 	Then return the updated product
 
 Examples: 
-	| id | name     |
-	| 1  | product1 |
-	| 1  | product2 |
+	| id | attribute   | value |
+	| 1  | Name        | name1 |
+	| 1  | Description | desc1 |
+	| 1  | Price       | 2.2   |

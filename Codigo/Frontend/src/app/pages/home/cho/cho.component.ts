@@ -7,6 +7,7 @@ import { StorageManager } from '../../../utils/storage-manager';
 import { PurchaseRequest, PurchaseRequestDetail } from 'src/app/interfaces/purchase';
 import { CommonService } from '../../../services/CommonService';
 import { Drug } from 'src/app/interfaces/drug';
+import { Product } from 'src/app/interfaces/product';
 
 @Component({
   selector: 'app-cho',
@@ -16,7 +17,7 @@ import { Drug } from 'src/app/interfaces/drug';
 export class ChoComponent implements OnInit {
   total: number = 0;
   email: string = "";
-  cart: Drug[] = [];
+  cart: Product[] | Drug[] = [];
 
   constructor(
     public iconSet: IconSetService,
@@ -40,8 +41,14 @@ export class ChoComponent implements OnInit {
     let cart = JSON.parse(this.storageManager.getData('cart'));
     let details : PurchaseRequestDetail[] = [];
     for (const item of cart) {
-      let detail = new PurchaseRequestDetail(item.code, item.quantity, item.pharmacy.id);
+      let detail = new PurchaseRequestDetail(item.code, item.quantity, item.pharmacy.id, item.code);
+      if (typeof item.code == 'number') {
+        detail.code = "";
+      } else {
+        detail.productCode = 0
+      }
       details.push(detail);
+      console.log(details);
     }
 
     let now = new Date().toISOString();
@@ -62,6 +69,7 @@ export class ChoComponent implements OnInit {
 
   updateCart(): void {
     this.cart = JSON.parse(this.storageManager.getData('cart'));
+    console.log(this.cart);
     if (!this.cart) {
       this.cart = [];
       this.storageManager.saveData('cart', JSON.stringify(this.cart));

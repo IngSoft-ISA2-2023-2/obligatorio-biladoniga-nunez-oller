@@ -40,6 +40,7 @@ import { ChoComponent } from './pages/home/cho/cho.component';
 
 
 import { DetailComponent } from './pages/home/detail/detail.component';
+import { ProductDetailComponent } from './pages/home/productDetail/productDetail.component';
 import { TrackingComponent } from './pages/home/tracking/tracking.component';
 import { Page404Component } from './pages/home/page404/page404.component';
 
@@ -54,7 +55,10 @@ import { CreatePharmacyComponent } from './pages/admin/create-pharmacy/create-ph
 import { EmployeeComponent } from './pages/employee/employee/employee.component';
 import { PurchaseStatusComponent } from './pages/employee/purchase-status/purchase-status.component';
 import { CreateDrugComponent } from './pages/employee/create-drug/create-drug.component';
+import { CreateProductComponent } from './pages/employee/create-product/create-product.component';
 import { DeleteDrugComponent } from './pages/employee/delete-drug/delete-drug.component';
+import { DeleteProductComponent } from './pages/employee/delete-product/delete-product.component';
+import { UpdateProductComponent } from './pages/employee/update-product/update-product.component';
 import { ExportDrugsComponent } from './pages/employee/export-drugs/export-drugs.component';
 
 // Login & Register
@@ -77,6 +81,7 @@ import { PurchaseByDateComponent } from './pages/owner/purchase-by-date/purchase
 // Owner
 import { InvitationComponent } from './pages/owner/invitation/invitation.component';
 import { StockRequestOwnerComponent } from './pages/owner/stock-request-owner/stock-request-owner.component';
+import { ListProductComponent } from './pages/employee/list-product/list-product.component';
 
 @NgModule({
   declarations: [
@@ -86,6 +91,7 @@ import { StockRequestOwnerComponent } from './pages/owner/stock-request-owner/st
     CartComponent,
     ChoComponent,
     DetailComponent,
+    ProductDetailComponent,
     TrackingComponent,
     // Custom components
     CustomFooterComponent,
@@ -107,7 +113,11 @@ import { StockRequestOwnerComponent } from './pages/owner/stock-request-owner/st
     EmployeeComponent,
     PurchaseStatusComponent,
     CreateDrugComponent,
+    CreateProductComponent,
     DeleteDrugComponent,
+    DeleteProductComponent,
+    UpdateProductComponent,
+    ListProductComponent,
     StockRequestComponent,
     CreateRequestComponent,
     ExportDrugsComponent,

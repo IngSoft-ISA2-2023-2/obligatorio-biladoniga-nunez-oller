@@ -17,6 +17,7 @@ namespace PharmaGo.WebApi.Models.Out
         {
             public int Id { get; set; }
             public string Code { get; set; }
+            public int ProductCode { get; set; }
             public string Name { get; set; }
             public int Quantity { get; set; }
             public decimal Price { get; set; }
@@ -36,10 +37,10 @@ namespace PharmaGo.WebApi.Models.Out
             if (purchase.details != null) {
                 foreach (var detail in purchase.details) {
                     Details.Add(new PurchaseDetailModelResponse {
-                        Id = detail.Id,         
-                        Name = detail.Drug.Name, 
-                        Code = detail.Drug.Code, 
-                        Price = detail.Drug.Price, 
+                        Id = detail.Id,
+                        Name = detail?.Drug?.Name ?? detail.Product.Name, 
+                        Code = detail?.Drug?.Code ?? detail.Product.Code.ToString(),
+                        Price = detail?.Drug?.Price ?? detail.Product.Price, 
                         Quantity = detail.Quantity,
                         PharmacyId = detail.Pharmacy.Id,
                         PharmacyName = detail.Pharmacy.Name,

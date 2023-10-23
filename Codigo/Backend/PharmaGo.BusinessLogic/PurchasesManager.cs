@@ -14,6 +14,7 @@ namespace PharmaGo.BusinessLogic
         private readonly IRepository<Purchase> _purchasesRepository;
         private readonly IRepository<Pharmacy> _pharmacysRepository;
         private readonly IRepository<Drug> _drugsRepository;
+        private readonly IRepository<Product> _productsRepository;
         private readonly IRepository<PurchaseDetail> _purchaseDetailRepository;
         private readonly IRepository<Session> _sessionRepository;
         private readonly IRepository<User> _userRepository;
@@ -25,6 +26,7 @@ namespace PharmaGo.BusinessLogic
         public PurchasesManager(IRepository<Purchase> purchasesRepository,
                                 IRepository<Pharmacy> pharmacysRepository,
                                 IRepository<Drug> drugsRepository,
+                                IRepository<Product> productsRepository,
                                 IRepository<PurchaseDetail> purchaseDetailRepository,
                                 IRepository<Session> sessionRespository,
                                 IRepository<User> userRespository)
@@ -32,6 +34,7 @@ namespace PharmaGo.BusinessLogic
             _purchasesRepository = purchasesRepository;
             _pharmacysRepository = pharmacysRepository;
             _drugsRepository = drugsRepository;
+            _productsRepository = productsRepository;
             _purchaseDetailRepository = purchaseDetailRepository;
             _sessionRepository = sessionRespository;
             _userRepository = userRespository;
@@ -64,16 +67,34 @@ namespace PharmaGo.BusinessLogic
                 if (detail.Quantity <= 0)
                     throw new InvalidResourceException("The Quantity is a mandatory field");
 
-                string drugCode = detail.Drug.Code;
-                var drug = pharmacy.Drugs.FirstOrDefault(x => x.Code == drugCode && x.Deleted == false);
-                if (drug is null)
-                    throw new ResourceNotFoundException($"Drug {drugCode} not found in Pharmacy {pharmacy.Name}");
+                string drugCode = detail?.Drug?.Code ?? "";
+                int productCode = detail?.Product?.Code ?? 0;
 
-                detail.Pharmacy = pharmacy;
-                total = total + (drug.Price * detail.Quantity);
-                detail.Price = drug.Price;
-                detail.Drug = drug;
-                detail.Status = PENDING;
+                if (String.IsNullOrEmpty(drugCode))
+                {
+                    var product = pharmacy.Products.FirstOrDefault(x => x.Code == productCode && x.Deleted == false);
+                    if (product is null)
+                        throw new ResourceNotFoundException($"Product {productCode} not found in Pharmacy {pharmacy.Name}");
+
+                    total = total + (product.Price * detail.Quantity);
+                    detail.Price = product.Price;
+                    detail.Product = product;
+
+                    detail.Pharmacy = pharmacy;
+                    detail.Status = PENDING;
+                } else
+                {
+                    var drug = pharmacy.Drugs.FirstOrDefault(x => x.Code == drugCode && x.Deleted == false);
+                    if (drug is null)
+                        throw new ResourceNotFoundException($"Drug {drugCode} not found in Pharmacy {pharmacy.Name}");
+
+                    total = total + (drug.Price * detail.Quantity);
+                    detail.Price = drug.Price;
+                    detail.Drug = drug;
+
+                    detail.Pharmacy = pharmacy;
+                    detail.Status = PENDING;
+                }
             }
             purchase.TotalAmount = total;
             purchase.TrackingCode = generateTrackingCode();
@@ -90,7 +111,7 @@ namespace PharmaGo.BusinessLogic
             return new string(Enumerable.Range(0, 16).Select(_ => charbase[rand.Next(charbase.Length)]).ToArray());
         }
 
-        public PurchaseDetail ApprobePurchaseDetail(int purchaseId, int pharmacyId, string drugCode)
+        public PurchaseDetail ApprobePurchaseDetail(int purchaseId, int pharmacyId, string drugCode, int productCode)
         {
             Purchase purchase = _purchasesRepository.GetOneDetailByExpression(p => p.Id == purchaseId);
             if (purchase is null)
@@ -99,7 +120,7 @@ namespace PharmaGo.BusinessLogic
             PurchaseDetail purchaseDetail = null;
             foreach (PurchaseDetail d in purchase.details)
             {
-                if (d.Pharmacy.Id == pharmacyId && d.Drug.Code == drugCode && d.Status.Equals(PENDING))
+                if (d.Pharmacy.Id == pharmacyId && (d?.Drug?.Code == drugCode || d?.Product?.Code == productCode) && d.Status.Equals(PENDING))
                 {
                     purchaseDetail = d;
                     break;
@@ -107,24 +128,41 @@ namespace PharmaGo.BusinessLogic
             }
 
             if (purchaseDetail is null)
-                throw new ResourceNotFoundException($"Purchase Detail not found for Pharmacy {pharmacyId} and Drug {drugCode}");
+                throw new ResourceNotFoundException($"Purchase Detail not found for Pharmacy {pharmacyId} and {drugCode ?? productCode.ToString()}");
 
             Pharmacy pharmacy = _pharmacysRepository.GetOneByExpression(p => p.Id == pharmacyId);
             if (pharmacy is null)
                 throw new ResourceNotFoundException($"Pharmacy with Id: {pharmacyId} not found");
 
-            var drug = pharmacy.Drugs.FirstOrDefault(x => x.Code == drugCode && x.Deleted == false);
-            if (drug is null)
-                throw new ResourceNotFoundException($"Drug {drugCode} not found in Pharmacy {pharmacy.Name}");
+            if (String.IsNullOrEmpty(drugCode))
+            {
+                var product = pharmacy.Products.FirstOrDefault(x => x.Code == productCode && x.Deleted == false);
+                if (product is null)
+                    throw new ResourceNotFoundException($"Product {productCode} not found in Pharmacy {pharmacy.Name}");
 
-            // Check Stock
-            if (purchaseDetail.Quantity > drug.Stock)
-                throw new InvalidResourceException($"The Drug {drug.Code} is out of stock in Pharmacy {pharmacy.Name}");
+                // Check Stock
+                if (purchaseDetail.Quantity > product.Stock)
+                    throw new InvalidResourceException($"The Product {product.Code} is out of stock in Pharmacy {pharmacy.Name}");
 
-            // Update Stock
-            drug.Stock = drug.Stock - purchaseDetail.Quantity;
-            _drugsRepository.UpdateOne(drug);
-            _drugsRepository.Save();
+                // Update Stock
+                product.Stock = product.Stock - purchaseDetail.Quantity;
+                _productsRepository.UpdateOne(product);
+                _productsRepository.Save();
+            } else
+            {
+                var drug = pharmacy.Drugs.FirstOrDefault(x => x.Code == drugCode && x.Deleted == false);
+                if (drug is null)
+                    throw new ResourceNotFoundException($"Drug {drugCode} not found in Pharmacy {pharmacy.Name}");
+
+                // Check Stock
+                if (purchaseDetail.Quantity > drug.Stock)
+                    throw new InvalidResourceException($"The Drug {drug.Code} is out of stock in Pharmacy {pharmacy.Name}");
+
+                // Update Stock
+                drug.Stock = drug.Stock - purchaseDetail.Quantity;
+                _drugsRepository.UpdateOne(drug);
+                _drugsRepository.Save();
+            }
 
             purchaseDetail.Status = APPROVED;
             _purchaseDetailRepository.UpdateOne(purchaseDetail);
@@ -133,7 +171,7 @@ namespace PharmaGo.BusinessLogic
             return purchaseDetail;
         }
 
-        public PurchaseDetail RejectPurchaseDetail(int purchaseId, int pharmacyId, string drugCode)
+        public PurchaseDetail RejectPurchaseDetail(int purchaseId, int pharmacyId, string drugCode, int productCode)
         {
             Purchase purchase = _purchasesRepository.GetOneDetailByExpression(p => p.Id == purchaseId);
             if (purchase is null)
@@ -141,22 +179,30 @@ namespace PharmaGo.BusinessLogic
             
             PurchaseDetail purchaseDetail = null;
             foreach (PurchaseDetail d in purchase.details) {
-                if (d.Pharmacy.Id == pharmacyId && d.Drug.Code == drugCode && d.Status.Equals(PENDING)) {
+                if (d.Pharmacy.Id == pharmacyId && (d?.Drug?.Code == drugCode || d?.Product?.Code == productCode) && d.Status.Equals(PENDING)) {
                     purchaseDetail = d;
                     break;
                 }
             }
 
             if (purchaseDetail is null)
-                throw new ResourceNotFoundException($"Purchase Detail not found for Pharmacy {pharmacyId} and Drug {drugCode}");
+                throw new ResourceNotFoundException($"Purchase Detail not found for Pharmacy {pharmacyId} and Code {drugCode ?? productCode.ToString()}");
 
             Pharmacy pharmacy = _pharmacysRepository.GetOneByExpression(p => p.Id == pharmacyId);
             if (pharmacy is null)
                 throw new ResourceNotFoundException($"Pharmacy with Id: {pharmacyId} not found");
 
-            var drug = pharmacy.Drugs.FirstOrDefault(x => x.Code == drugCode && x.Deleted == false);
-            if (drug is null)
-                throw new ResourceNotFoundException($"Drug {drugCode} not found in Pharmacy {pharmacy.Name}");
+            if (String.IsNullOrEmpty(drugCode))
+            {
+                var product = pharmacy.Products.FirstOrDefault(x => x.Code == productCode && x.Deleted == false);
+                if (product is null)
+                    throw new ResourceNotFoundException($"Product {productCode} not found in Pharmacy {pharmacy.Name}");
+            } else
+            {
+                var drug = pharmacy.Drugs.FirstOrDefault(x => x.Code == drugCode && x.Deleted == false);
+                if (drug is null)
+                    throw new ResourceNotFoundException($"Drug {drugCode} not found in Pharmacy {pharmacy.Name}");
+            }
 
             purchaseDetail.Status = REJECTED;
             _purchaseDetailRepository.UpdateOne(purchaseDetail);

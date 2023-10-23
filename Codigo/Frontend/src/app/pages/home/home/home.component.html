@@ -32,6 +32,31 @@
             </c-card-body>
           </c-row>
         </c-card>
+        <c-card
+        [cBorder]="{top: {color: 'info', width: 3}}"
+        class="mb-3"
+        *ngFor="let product of products">
+          <c-row class="g-0">
+            <c-card-body cCol [md]="8">
+              <h4 cCardTitle>{{ product.name }}</h4>
+              <h5 class="card-subtitle mb-2 text-muted"> 
+                {{ product?.pharmacy?.name ?? "" }}
+              </h5>
+              <h5 class="card-subtitle mb-2 text-muted"> 
+              </h5>
+              <p cCardText> 
+                <b>Description:</b> {{ product.description }} <br>
+                <b>Price:</b> {{ product.price | currency}}
+              </p>
+              <div [ngStyle]="{ 'text-align': 'end' }">
+              <button cButton color="primary" [routerLink]="['/home/productDetail', product.id]">
+                View Details
+                <svg cIcon name="cil-plus"></svg>
+              </button>
+            </div>
+            </c-card-body>
+          </c-row>
+        </c-card>
       </c-col>
     </c-row>
   </c-container>
