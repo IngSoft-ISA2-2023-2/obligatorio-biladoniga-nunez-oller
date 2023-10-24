@@ -1,0 +1,3771 @@
+diff --git a/Codigo/Backend/PharmaGo.BusinessLogic/ProductManager.cs b/Codigo/Backend/PharmaGo.BusinessLogic/ProductManager.cs
+new file mode 100644
+index 0000000..9cc1f8f
+--- /dev/null
++++ b/Codigo/Backend/PharmaGo.BusinessLogic/ProductManager.cs
+@@ -0,0 +1,102 @@
++﻿using PharmaGo.Domain.Entities;
++using PharmaGo.Exceptions;
++using PharmaGo.IBusinessLogic;
++using PharmaGo.IDataAccess;
++
++namespace PharmaGo.BusinessLogic
++{
++    public class ProductManager : IProductManager
++    {
++        private readonly IRepository<Product> _productRepository;
++        private readonly IRepository<Session> _sessionRepository;
++        private readonly IRepository<User> _userRepository;
++        private readonly IRepository<Pharmacy> _pharmacyRepository;
++
++
++        public ProductManager(IRepository<Product> productRepository, IRepository<Session> sessionRepository, IRepository<User> userRepository, IRepository<Pharmacy> pharmacyRepository)
++        {
++            _productRepository = productRepository;
++            _sessionRepository = sessionRepository;
++            _pharmacyRepository = pharmacyRepository;
++            _userRepository = userRepository;
++        }
++
++        public void Delete(int id)
++        {
++            var productSaved = _productRepository.GetOneByExpression(d => d.Id == id);
++            if (productSaved == null)
++            {
++                throw new ResourceNotFoundException("The product to delete does not exist.");
++            }
++            productSaved.Deleted = true;
++            _productRepository.UpdateOne(productSaved);
++            _productRepository.Save();
++        }
++
++        public List<Product> GetProducts()
++        {
++            var products = _productRepository.GetAllByExpression(p => !p.Deleted);
++
++            return products.ToList();
++        }
++
++        public Product UpdateProduct(int id, Product product)
++        {
++            var productSaved = _productRepository.GetOneByExpression(d => d.Id == id);
++            if (productSaved == null)
++            {
++                throw new ResourceNotFoundException("The product to update does not exist.");
++            }
++            
++            if (product.Name != null)
++            {
++                productSaved.Name = product.Name;
++            }
++
++            if (product.Price != 0)
++            {
++                productSaved.Price = product.Price;
++            }
++
++            if (product.Description != null)
++            {
++                productSaved.Description = product.Description;
++            }
++
++            _productRepository.UpdateOne(productSaved);
++            _productRepository.Save();
++
++            return productSaved;
++        }
++
++        public Product Create(Product product, string token)
++        {
++            if (product == null)
++            {
++                throw new ResourceNotFoundException("Please create a drug before inserting it.");
++            }
++            product.ValidOrFail();
++
++            var guidToken = new Guid(token);
++            Session session = _sessionRepository.GetOneByExpression(s => s.Token == guidToken);
++            var userId = session.UserId;
++            User user = _userRepository.GetOneDetailByExpression(u => u.Id == userId);
++
++            Pharmacy pharmacyOfProduct = _pharmacyRepository.GetOneByExpression(p => p.Name == user.Pharmacy.Name);
++            if (pharmacyOfProduct == null)
++            {
++                throw new ResourceNotFoundException("The pharmacy of the product does not exist.");
++            }
++
++            if (_productRepository.Exists(p => p.Code == product.Code && p.Pharmacy != null && p.Pharmacy.Name == pharmacyOfProduct.Name && !p.Deleted))
++            {
++                throw new InvalidResourceException("The product already exists in that pharmacy.");
++            }
++
++            product.Pharmacy = pharmacyOfProduct;
++            _productRepository.InsertOne(product);
++            _productRepository.Save();
++            return product;
++        }
++    }
++}
+diff --git a/Codigo/Backend/PharmaGo.BusinessLogic/PurchasesManager.cs b/Codigo/Backend/PharmaGo.BusinessLogic/PurchasesManager.cs
+index cf2f331..2dc6827 100644
+--- a/Codigo/Backend/PharmaGo.BusinessLogic/PurchasesManager.cs
++++ b/Codigo/Backend/PharmaGo.BusinessLogic/PurchasesManager.cs
+@@ -14,6 +14,7 @@ namespace PharmaGo.BusinessLogic
+         private readonly IRepository<Purchase> _purchasesRepository;
+         private readonly IRepository<Pharmacy> _pharmacysRepository;
+         private readonly IRepository<Drug> _drugsRepository;
++        private readonly IRepository<Product> _productsRepository;
+         private readonly IRepository<PurchaseDetail> _purchaseDetailRepository;
+         private readonly IRepository<Session> _sessionRepository;
+         private readonly IRepository<User> _userRepository;
+@@ -25,6 +26,7 @@ namespace PharmaGo.BusinessLogic
+         public PurchasesManager(IRepository<Purchase> purchasesRepository,
+                                 IRepository<Pharmacy> pharmacysRepository,
+                                 IRepository<Drug> drugsRepository,
++                                IRepository<Product> productsRepository,
+                                 IRepository<PurchaseDetail> purchaseDetailRepository,
+                                 IRepository<Session> sessionRespository,
+                                 IRepository<User> userRespository)
+@@ -32,6 +34,7 @@ namespace PharmaGo.BusinessLogic
+             _purchasesRepository = purchasesRepository;
+             _pharmacysRepository = pharmacysRepository;
+             _drugsRepository = drugsRepository;
++            _productsRepository = productsRepository;
+             _purchaseDetailRepository = purchaseDetailRepository;
+             _sessionRepository = sessionRespository;
+             _userRepository = userRespository;
+@@ -64,16 +67,34 @@ namespace PharmaGo.BusinessLogic
+                 if (detail.Quantity <= 0)
+                     throw new InvalidResourceException("The Quantity is a mandatory field");
+ 
+-                string drugCode = detail.Drug.Code;
+-                var drug = pharmacy.Drugs.FirstOrDefault(x => x.Code == drugCode && x.Deleted == false);
+-                if (drug is null)
+-                    throw new ResourceNotFoundException($"Drug {drugCode} not found in Pharmacy {pharmacy.Name}");
++                string drugCode = detail?.Drug?.Code ?? "";
++                int productCode = detail?.Product?.Code ?? 0;
++
++                if (String.IsNullOrEmpty(drugCode))
++                {
++                    var product = pharmacy.Products.FirstOrDefault(x => x.Code == productCode && x.Deleted == false);
++                    if (product is null)
++                        throw new ResourceNotFoundException($"Product {productCode} not found in Pharmacy {pharmacy.Name}");
++
++                    total = total + (product.Price * detail.Quantity);
++                    detail.Price = product.Price;
++                    detail.Product = product;
+ 
+-                detail.Pharmacy = pharmacy;
+-                total = total + (drug.Price * detail.Quantity);
+-                detail.Price = drug.Price;
+-                detail.Drug = drug;
+-                detail.Status = PENDING;
++                    detail.Pharmacy = pharmacy;
++                    detail.Status = PENDING;
++                } else
++                {
++                    var drug = pharmacy.Drugs.FirstOrDefault(x => x.Code == drugCode && x.Deleted == false);
++                    if (drug is null)
++                        throw new ResourceNotFoundException($"Drug {drugCode} not found in Pharmacy {pharmacy.Name}");
++
++                    total = total + (drug.Price * detail.Quantity);
++                    detail.Price = drug.Price;
++                    detail.Drug = drug;
++
++                    detail.Pharmacy = pharmacy;
++                    detail.Status = PENDING;
++                }
+             }
+             purchase.TotalAmount = total;
+             purchase.TrackingCode = generateTrackingCode();
+@@ -90,7 +111,7 @@ namespace PharmaGo.BusinessLogic
+             return new string(Enumerable.Range(0, 16).Select(_ => charbase[rand.Next(charbase.Length)]).ToArray());
+         }
+ 
+-        public PurchaseDetail ApprobePurchaseDetail(int purchaseId, int pharmacyId, string drugCode)
++        public PurchaseDetail ApprobePurchaseDetail(int purchaseId, int pharmacyId, string drugCode, int productCode)
+         {
+             Purchase purchase = _purchasesRepository.GetOneDetailByExpression(p => p.Id == purchaseId);
+             if (purchase is null)
+@@ -99,7 +120,7 @@ namespace PharmaGo.BusinessLogic
+             PurchaseDetail purchaseDetail = null;
+             foreach (PurchaseDetail d in purchase.details)
+             {
+-                if (d.Pharmacy.Id == pharmacyId && d.Drug.Code == drugCode && d.Status.Equals(PENDING))
++                if (d.Pharmacy.Id == pharmacyId && (d?.Drug?.Code == drugCode || d?.Product?.Code == productCode) && d.Status.Equals(PENDING))
+                 {
+                     purchaseDetail = d;
+                     break;
+@@ -107,24 +128,41 @@ namespace PharmaGo.BusinessLogic
+             }
+ 
+             if (purchaseDetail is null)
+-                throw new ResourceNotFoundException($"Purchase Detail not found for Pharmacy {pharmacyId} and Drug {drugCode}");
++                throw new ResourceNotFoundException($"Purchase Detail not found for Pharmacy {pharmacyId} and {drugCode ?? productCode.ToString()}");
+ 
+             Pharmacy pharmacy = _pharmacysRepository.GetOneByExpression(p => p.Id == pharmacyId);
+             if (pharmacy is null)
+                 throw new ResourceNotFoundException($"Pharmacy with Id: {pharmacyId} not found");
+ 
+-            var drug = pharmacy.Drugs.FirstOrDefault(x => x.Code == drugCode && x.Deleted == false);
+-            if (drug is null)
+-                throw new ResourceNotFoundException($"Drug {drugCode} not found in Pharmacy {pharmacy.Name}");
++            if (String.IsNullOrEmpty(drugCode))
++            {
++                var product = pharmacy.Products.FirstOrDefault(x => x.Code == productCode && x.Deleted == false);
++                if (product is null)
++                    throw new ResourceNotFoundException($"Product {productCode} not found in Pharmacy {pharmacy.Name}");
++
++                // Check Stock
++                if (purchaseDetail.Quantity > product.Stock)
++                    throw new InvalidResourceException($"The Product {product.Code} is out of stock in Pharmacy {pharmacy.Name}");
++
++                // Update Stock
++                product.Stock = product.Stock - purchaseDetail.Quantity;
++                _productsRepository.UpdateOne(product);
++                _productsRepository.Save();
++            } else
++            {
++                var drug = pharmacy.Drugs.FirstOrDefault(x => x.Code == drugCode && x.Deleted == false);
++                if (drug is null)
++                    throw new ResourceNotFoundException($"Drug {drugCode} not found in Pharmacy {pharmacy.Name}");
+ 
+-            // Check Stock
+-            if (purchaseDetail.Quantity > drug.Stock)
+-                throw new InvalidResourceException($"The Drug {drug.Code} is out of stock in Pharmacy {pharmacy.Name}");
++                // Check Stock
++                if (purchaseDetail.Quantity > drug.Stock)
++                    throw new InvalidResourceException($"The Drug {drug.Code} is out of stock in Pharmacy {pharmacy.Name}");
+ 
+-            // Update Stock
+-            drug.Stock = drug.Stock - purchaseDetail.Quantity;
+-            _drugsRepository.UpdateOne(drug);
+-            _drugsRepository.Save();
++                // Update Stock
++                drug.Stock = drug.Stock - purchaseDetail.Quantity;
++                _drugsRepository.UpdateOne(drug);
++                _drugsRepository.Save();
++            }
+ 
+             purchaseDetail.Status = APPROVED;
+             _purchaseDetailRepository.UpdateOne(purchaseDetail);
+@@ -133,7 +171,7 @@ namespace PharmaGo.BusinessLogic
+             return purchaseDetail;
+         }
+ 
+-        public PurchaseDetail RejectPurchaseDetail(int purchaseId, int pharmacyId, string drugCode)
++        public PurchaseDetail RejectPurchaseDetail(int purchaseId, int pharmacyId, string drugCode, int productCode)
+         {
+             Purchase purchase = _purchasesRepository.GetOneDetailByExpression(p => p.Id == purchaseId);
+             if (purchase is null)
+@@ -141,22 +179,30 @@ namespace PharmaGo.BusinessLogic
+             
+             PurchaseDetail purchaseDetail = null;
+             foreach (PurchaseDetail d in purchase.details) {
+-                if (d.Pharmacy.Id == pharmacyId && d.Drug.Code == drugCode && d.Status.Equals(PENDING)) {
++                if (d.Pharmacy.Id == pharmacyId && (d?.Drug?.Code == drugCode || d?.Product?.Code == productCode) && d.Status.Equals(PENDING)) {
+                     purchaseDetail = d;
+                     break;
+                 }
+             }
+ 
+             if (purchaseDetail is null)
+-                throw new ResourceNotFoundException($"Purchase Detail not found for Pharmacy {pharmacyId} and Drug {drugCode}");
++                throw new ResourceNotFoundException($"Purchase Detail not found for Pharmacy {pharmacyId} and Code {drugCode ?? productCode.ToString()}");
+ 
+             Pharmacy pharmacy = _pharmacysRepository.GetOneByExpression(p => p.Id == pharmacyId);
+             if (pharmacy is null)
+                 throw new ResourceNotFoundException($"Pharmacy with Id: {pharmacyId} not found");
+ 
+-            var drug = pharmacy.Drugs.FirstOrDefault(x => x.Code == drugCode && x.Deleted == false);
+-            if (drug is null)
+-                throw new ResourceNotFoundException($"Drug {drugCode} not found in Pharmacy {pharmacy.Name}");
++            if (String.IsNullOrEmpty(drugCode))
++            {
++                var product = pharmacy.Products.FirstOrDefault(x => x.Code == productCode && x.Deleted == false);
++                if (product is null)
++                    throw new ResourceNotFoundException($"Product {productCode} not found in Pharmacy {pharmacy.Name}");
++            } else
++            {
++                var drug = pharmacy.Drugs.FirstOrDefault(x => x.Code == drugCode && x.Deleted == false);
++                if (drug is null)
++                    throw new ResourceNotFoundException($"Drug {drugCode} not found in Pharmacy {pharmacy.Name}");
++            }
+ 
+             purchaseDetail.Status = REJECTED;
+             _purchaseDetailRepository.UpdateOne(purchaseDetail);
+diff --git a/Codigo/Backend/PharmaGo.DataAccess/Migrations/20231021173854_productMigration.Designer.cs b/Codigo/Backend/PharmaGo.DataAccess/Migrations/20231021173854_productMigration.Designer.cs
+new file mode 100644
+index 0000000..44eaccd
+@@ -19,6 +19,8 @@ namespace PharmaGo.DataAccess
+         public DbSet<UnitMeasure> UnitMeasures { get; set; }
+         public DbSet<Presentation> Presentations { get; set; }
+         public DbSet<Session> Sessions { get; set; }
++        public DbSet<Product> Products { get; set; }
++
+ 
+         public PharmacyGoDbContext(DbContextOptions<PharmacyGoDbContext> options) : base(options) { }
+ 
+@@ -27,13 +29,24 @@ namespace PharmaGo.DataAccess
+             modelBuilder.Entity<Drug>().Property(property => property.Price).HasPrecision(14, 2);
+             modelBuilder.Entity<Purchase>().Property(property => property.TotalAmount).HasPrecision(14, 2);
+             modelBuilder.Entity<PurchaseDetail>().Property(property => property.Price).HasPrecision(14, 2);
+-
++            modelBuilder.Entity<Product>().Property(property => property.Price).HasPrecision(14, 2);
+             modelBuilder.Entity<UnitMeasure>().Property(u => u.Name).HasConversion<string>();
+             modelBuilder.Entity<Presentation>().Property(u => u.Name).HasConversion<string>();
++            
++            modelBuilder
++                .Entity<Product>()
++                .HasData(
++                    new Product()
++                    {
++                        Id = 1,
++                        Name = "test",
++                        Description = "test",
++                        Deleted = true,
++                        Price = 0,
++                    }
++                );
+ 
+             base.OnModelCreating(modelBuilder);
+-
+         }
+-
+     }
+ }
+\ No newline at end of file
+diff --git a/Codigo/Backend/PharmaGo.DataAccess/Repositories/BaseRepository.cs b/Codigo/Backend/PharmaGo.DataAccess/Repositories/BaseRepository.cs
+index cbb5b97..1fef0d4 100644
+--- a/Codigo/Backend/PharmaGo.DataAccess/Repositories/BaseRepository.cs
++++ b/Codigo/Backend/PharmaGo.DataAccess/Repositories/BaseRepository.cs
+@@ -19,7 +19,7 @@ namespace PharmaGo.DataAccess.Repositories
+             return _context.Set<T>().Where(expression);
+         }
+ 
+-        public virtual T GetOneByExpression(Expression<Func<T, bool>> expression)
++        public virtual T GetOneByExpression(Expression<Func<T, bool>> expression) 
+         {
+             return _context.Set<T>().FirstOrDefault(expression);
+         }
+diff --git a/Codigo/Backend/PharmaGo.DataAccess/Repositories/PharmacyRepository.cs b/Codigo/Backend/PharmaGo.DataAccess/Repositories/PharmacyRepository.cs
+index 951559d..a928758 100644
+--- a/Codigo/Backend/PharmaGo.DataAccess/Repositories/PharmacyRepository.cs
++++ b/Codigo/Backend/PharmaGo.DataAccess/Repositories/PharmacyRepository.cs
+@@ -15,7 +15,7 @@ namespace PharmaGo.DataAccess.Repositories
+ 
+         public override Pharmacy GetOneByExpression(Expression<Func<Pharmacy, bool>> expression)
+         {
+-            return _context.Set<Pharmacy>().Include("Users").Include("Drugs").FirstOrDefault(expression);
++            return _context.Set<Pharmacy>().Include("Users").Include("Drugs").Include("Products").FirstOrDefault(expression);
+         }
+     }
+ }
+diff --git a/Codigo/Backend/PharmaGo.DataAccess/Repositories/ProductRepository.cs b/Codigo/Backend/PharmaGo.DataAccess/Repositories/ProductRepository.cs
+new file mode 100644
+index 0000000..f585d75
+--- /dev/null
++++ b/Codigo/Backend/PharmaGo.DataAccess/Repositories/ProductRepository.cs
+@@ -0,0 +1,33 @@
++﻿using Microsoft.EntityFrameworkCore;
++using PharmaGo.Domain.Entities;
++using System;
++using System.Collections.Generic;
++using System.Linq;
++using System.Linq.Expressions;
++using System.Text;
++using System.Threading.Tasks;
++
++namespace PharmaGo.DataAccess.Repositories
++{
++    public class ProductRepository : BaseRepository<Product>
++    {
++
++        private readonly PharmacyGoDbContext _context;
++
++        public ProductRepository(PharmacyGoDbContext context) : base(context)
++        {
++            _context = context;
++        }
++
++        public override void InsertOne(Product product)
++        {
++            _context.Entry(product).State = EntityState.Added;
++            _context.Set<Product>().Add(product);
++        }
++
++        public override IEnumerable<Product> GetAllByExpression(Expression<Func<Product, bool>> expression)
++        {
++            return _context.Set<Product>().Include(x => x.Pharmacy).Where(expression);
++        }
++    }
++}
+diff --git a/Codigo/Backend/PharmaGo.DataAccess/Repositories/PurchasesRepository.cs b/Codigo/Backend/PharmaGo.DataAccess/Repositories/PurchasesRepository.cs
+index 9a29c8b..4fc8634 100644
+--- a/Codigo/Backend/PharmaGo.DataAccess/Repositories/PurchasesRepository.cs
++++ b/Codigo/Backend/PharmaGo.DataAccess/Repositories/PurchasesRepository.cs
+@@ -34,6 +34,7 @@ namespace PharmaGo.DataAccess.Repositories
+         {
+             return _context.Set<Purchase>()
+                 .Include(x => x.details).ThenInclude(d => d.Drug)
++                .Include(x => x.details).ThenInclude(p => p.Product)
+                 .Include(x => x.details).ThenInclude(p => p.Pharmacy)
+                 .Where(expression).OrderBy(p => p.PurchaseDate);
+         }
+@@ -47,6 +48,7 @@ namespace PharmaGo.DataAccess.Repositories
+         {
+             return _context.Set<Purchase>()
+                 .Include(x => x.details).ThenInclude(d => d.Drug)
++                .Include(x => x.details).ThenInclude(p => p.Product)
+                 .Include(x => x.details).ThenInclude(d => d.Pharmacy)
+                 .FirstOrDefault(expression);
+         }
+diff --git a/Codigo/Backend/PharmaGo.Domain/Entities/Pharmacy.cs b/Codigo/Backend/PharmaGo.Domain/Entities/Pharmacy.cs
+index 6ff7bc8..31ecc99 100644
+--- a/Codigo/Backend/PharmaGo.Domain/Entities/Pharmacy.cs
++++ b/Codigo/Backend/PharmaGo.Domain/Entities/Pharmacy.cs
+@@ -11,6 +11,7 @@ namespace PharmaGo.Domain.Entities
+         public string Address { get; set; }
+         public ICollection<User> Users { get; set; }
+         public ICollection<Drug> Drugs { get; set; }
++        public ICollection<Product> Products { get; set; }
+ 
+         public void ValidOrFail()
+         {
+diff --git a/Codigo/Backend/PharmaGo.Domain/Entities/Product.cs b/Codigo/Backend/PharmaGo.Domain/Entities/Product.cs
+index 9d09fdf..a8d1733 100644
+--- a/Codigo/Backend/PharmaGo.Domain/Entities/Product.cs
++++ b/Codigo/Backend/PharmaGo.Domain/Entities/Product.cs
+@@ -1,4 +1,8 @@
+-﻿namespace PharmaGo.Domain.Entities
++﻿using PharmaGo.Exceptions;
++using System;
++using System.Collections.Generic;
++
++namespace PharmaGo.Domain.Entities
+ {
+     public class Product
+     {
+@@ -7,5 +11,19 @@
+         public string Name { get; set; }
+         public string Description { get; set; }
+         public decimal Price { get; set; }
++        public bool Deleted { get; set; }
++        public int Stock { get; set; }
++        public Pharmacy? Pharmacy { get; set; }
++
++        public void ValidOrFail()
++        {
++            if (string.IsNullOrEmpty(Name) || string.IsNullOrEmpty(Description)
++                     || Price <= 0 || Code <=0 || Code.ToString().Length != 5 ||
++                     Name.Length > 30 || Description.Length > 70
++                     )
++            {
++                throw new InvalidResourceException("The Product is not correctly created.");
++            }
++        }
+     }
+ }
+diff --git a/Codigo/Backend/PharmaGo.Domain/Entities/PurchaseDetail.cs b/Codigo/Backend/PharmaGo.Domain/Entities/PurchaseDetail.cs
+index 004f0d6..86bbf01 100644
+--- a/Codigo/Backend/PharmaGo.Domain/Entities/PurchaseDetail.cs
++++ b/Codigo/Backend/PharmaGo.Domain/Entities/PurchaseDetail.cs
+@@ -2,9 +2,9 @@
+ {
+     public class PurchaseDetail
+     {
+-
+         public int Id { get; set; }
+-        public Drug Drug { get; set; }
++        public Drug? Drug { get; set; }
++        public Product? Product { get; set; }
+         public int Quantity { get; set; }
+         public decimal Price { get; set; }
+         public Pharmacy Pharmacy { get; set; }
+diff --git a/Codigo/Backend/PharmaGo.Factory/ServiceFactory.cs b/Codigo/Backend/PharmaGo.Factory/ServiceFactory.cs
+index 5574da9..5e4b9a1 100644
+--- a/Codigo/Backend/PharmaGo.Factory/ServiceFactory.cs
++++ b/Codigo/Backend/PharmaGo.Factory/ServiceFactory.cs
+@@ -12,7 +12,6 @@ namespace PharmaGo.Factory
+ {
+     public static class ServiceFactory
+     {
+-
+         public static void RegisterBusinessLogicServices(this IServiceCollection serviceCollection, IConfiguration configuration)
+         {
+             serviceCollection.AddScoped<ILoginManager, LoginManager>();
+@@ -26,6 +25,7 @@ namespace PharmaGo.Factory
+             serviceCollection.AddScoped<IUnitMeasureManager, UnitMeasureManager>();
+             serviceCollection.AddScoped<IExportManager, ExportManager>();
+             serviceCollection.AddScoped<IRoleManager, RoleManager>();
++            serviceCollection.AddScoped<IProductManager, ProductManager>();
+         }
+ 
+         public static void RegisterDataAccessServices(this IServiceCollection serviceCollection, IConfiguration configuration)
+@@ -42,7 +42,7 @@ namespace PharmaGo.Factory
+             serviceCollection.AddScoped<IRepository<Drug>, DrugRepository>();
+             serviceCollection.AddScoped<IRepository<PurchaseDetail>, PurchasesDetailRepository>();
+             serviceCollection.AddScoped<IRepository<Role>, RoleRepository>();
+-
++            serviceCollection.AddScoped<IRepository<Product>, ProductRepository>();
+             serviceCollection.AddDbContext<DbContext, PharmacyGoDbContext>(o => o.UseSqlServer(configuration.GetConnectionString("PharmaGo")));
+         }
+ 
+diff --git a/Codigo/Backend/PharmaGo.IBusinessLogic/IProductManager.cs b/Codigo/Backend/PharmaGo.IBusinessLogic/IProductManager.cs
+new file mode 100644
+index 0000000..c6000a9
+--- /dev/null
++++ b/Codigo/Backend/PharmaGo.IBusinessLogic/IProductManager.cs
+@@ -0,0 +1,12 @@
++﻿using PharmaGo.Domain.Entities;
++
++namespace PharmaGo.IBusinessLogic
++{
++    public interface IProductManager
++    {
++        void Delete(int id);
++        List<Product> GetProducts();
++        Product UpdateProduct(int id, Product product);
++        Product Create(Product product, string token);
++    }
++}
+diff --git a/Codigo/Backend/PharmaGo.IBusinessLogic/IPurchasesManager.cs b/Codigo/Backend/PharmaGo.IBusinessLogic/IPurchasesManager.cs
+index 53abba4..29f718f 100644
+--- a/Codigo/Backend/PharmaGo.IBusinessLogic/IPurchasesManager.cs
++++ b/Codigo/Backend/PharmaGo.IBusinessLogic/IPurchasesManager.cs
+@@ -7,8 +7,8 @@ namespace PharmaGo.IBusinessLogic
+         public ICollection<Purchase> GetAllPurchases(string token);
+         public ICollection<Purchase> GetAllPurchasesByDate(string token, DateTime? start, DateTime? end);
+         public Purchase CreatePurchase(Purchase purchase);
+-        public PurchaseDetail ApprobePurchaseDetail(int purchaseId, int pharmacyId, string drugCode);
+-        public PurchaseDetail RejectPurchaseDetail(int purchaseDetailId, int pharmacyId, string drugCode);
++        public PurchaseDetail ApprobePurchaseDetail(int purchaseId, int pharmacyId, string drugCode, int productCode);
++        public PurchaseDetail RejectPurchaseDetail(int purchaseDetailId, int pharmacyId, string drugCode, int productCode);
+         public Purchase GetPurchaseByTrackingCode(string trackingCode);
+     }
+ }
+diff --git a/Codigo/Backend/PharmaGo.WebApi/Controllers/ProductsController.cs b/Codigo/Backend/PharmaGo.WebApi/Controllers/ProductsController.cs
+new file mode 100644
+index 0000000..c81ed88
+--- /dev/null
++++ b/Codigo/Backend/PharmaGo.WebApi/Controllers/ProductsController.cs
+@@ -0,0 +1,61 @@
++﻿using Microsoft.AspNetCore.Mvc;
++using NuGet.Protocol;
++using PharmaGo.BusinessLogic;
++using PharmaGo.Domain.Entities;
++using PharmaGo.IBusinessLogic;
++using PharmaGo.WebApi.Enums;
++using PharmaGo.WebApi.Filters;
++using PharmaGo.WebApi.Models.In;
++using PharmaGo.WebApi.Models.Out;
++
++namespace PharmaGo.WebApi.Controllers
++{
++    [Route("api/products")]
++    [ApiController]
++    [TypeFilter(typeof(ExceptionFilter))]
++    public class ProductsController : ControllerBase
++    {
++        private readonly IProductManager _productsManager;
++
++        public ProductsController(IProductManager manager)
++        {
++            _productsManager = manager;
++        }
++
++        [HttpGet]
++        public IActionResult GetProducts()
++        {
++            var products = _productsManager.GetProducts();
++
++            return Ok(products.Select(p => new ProductModelOut(p)));
++        }
++
++        [HttpPut("{id}")]
++        [AuthorizationFilter(new string[] { nameof(RoleType.Employee) })]
++        public IActionResult UpdateProduct([FromRoute] int id, [FromBody] UpdateProductModelIn modelIn)
++        {
++            var updatedProduct = _productsManager.UpdateProduct(id, modelIn.ToEntity());
++
++            return Ok(new UpdateProductModelOut(updatedProduct));
++        }
++
++        [HttpDelete("{id}")]
++        [AuthorizationFilter(new string[] { nameof(RoleType.Employee) })]
++        public IActionResult DeleteProduct([FromRoute] int id)
++        {
++            _productsManager.Delete(id);
++
++            return Ok();
++        }
++
++        [HttpPost]
++        [AuthorizationFilter(new string[] { nameof(RoleType.Employee) })]
++        public IActionResult Create([FromBody] ProductModel productModel)
++        {
++            string token = HttpContext.Request.Headers["Authorization"];
++            Product productCreated = _productsManager.Create(productModel.ToEntity(), token);
++            ProductModelOut productResponse = new ProductModelOut(productCreated);
++            return Ok(productResponse);
++        }
++    }
++}
+diff --git a/Codigo/Backend/PharmaGo.WebApi/Controllers/PurchasesController.cs b/Codigo/Backend/PharmaGo.WebApi/Controllers/PurchasesController.cs
+index a551eae..1dd8cf8 100644
+--- a/Codigo/Backend/PharmaGo.WebApi/Controllers/PurchasesController.cs
++++ b/Codigo/Backend/PharmaGo.WebApi/Controllers/PurchasesController.cs
+@@ -46,7 +46,7 @@ namespace PharmaGo.WebApi.Controllers
+         [AuthorizationFilter(new string[] { nameof(RoleType.Employee) })]
+         public IActionResult Approve(int id, [FromBody] PurchaseAuthorizationModel model)
+         {
+-            var purchaseDetail = _purchasesManager.ApprobePurchaseDetail(id, model.pharmacyId, model.drugCode);
++            var purchaseDetail = _purchasesManager.ApprobePurchaseDetail(id, model.pharmacyId, model.drugCode, model.productCode);
+             var purchaseDetailModelResponse = new PurchaseDetailModelResponse(id, purchaseDetail);
+             return Ok(purchaseDetailModelResponse);
+         }
+@@ -56,7 +56,7 @@ namespace PharmaGo.WebApi.Controllers
+         [AuthorizationFilter(new string[] { nameof(RoleType.Employee) })]
+         public IActionResult Reject(int id, [FromBody] PurchaseAuthorizationModel model)
+         {
+-            var purchaseDetail = _purchasesManager.RejectPurchaseDetail(id, model.pharmacyId, model.drugCode);
++            var purchaseDetail = _purchasesManager.RejectPurchaseDetail(id, model.pharmacyId, model.drugCode, model.productCode);
+             var purchaseDetailModelResponse = new PurchaseDetailModelResponse(id, purchaseDetail);
+             return Ok(purchaseDetailModelResponse);
+         }
+diff --git a/Codigo/Backend/PharmaGo.WebApi/Converters/ConvertPurchaseModelRequestToPurchase.cs b/Codigo/Backend/PharmaGo.WebApi/Converters/ConvertPurchaseModelRequestToPurchase.cs
+index 8d15eb5..82d556f 100644
+--- a/Codigo/Backend/PharmaGo.WebApi/Converters/ConvertPurchaseModelRequestToPurchase.cs
++++ b/Codigo/Backend/PharmaGo.WebApi/Converters/ConvertPurchaseModelRequestToPurchase.cs
+@@ -15,16 +15,31 @@ namespace PharmaGo.WebApi.Converters
+             purchase.details = new List<PurchaseDetail>();
+             foreach (var detail in model.Details)
+             {
+-                purchase.details
+-                    .Add(new PurchaseDetail
+-                    {
+-                        Quantity = detail.Quantity,
+-                        Drug = new Drug { Code = detail.Code },
+-                        Pharmacy = new()
++                if (String.IsNullOrEmpty(detail.Code))
++                {
++                    purchase.details
++                        .Add(new PurchaseDetail
+                         {
+-                            Id = detail.PharmacyId
+-                        }
+-                    });
++                            Quantity = detail.Quantity,
++                            Product = new Product { Code = detail.ProductCode },
++                            Pharmacy = new()
++                            {
++                                Id = detail.PharmacyId
++                            }
++                        });
++                } else
++                {
++                    purchase.details
++                        .Add(new PurchaseDetail
++                        {
++                            Quantity = detail.Quantity,
++                            Drug = new Drug { Code = detail.Code },
++                            Pharmacy = new()
++                            {
++                                Id = detail.PharmacyId
++                            }
++                        });
++                }
+             }
+ 
+             return purchase;
+diff --git a/Codigo/Backend/PharmaGo.WebApi/Filters/AuthorizationFilter.cs b/Codigo/Backend/PharmaGo.WebApi/Filters/AuthorizationFilter.cs
+index d20d4c9..0930849 100644
+--- a/Codigo/Backend/PharmaGo.WebApi/Filters/AuthorizationFilter.cs
++++ b/Codigo/Backend/PharmaGo.WebApi/Filters/AuthorizationFilter.cs
+@@ -25,7 +25,7 @@ namespace PharmaGo.WebApi.Filters
+             string token = context.HttpContext.Request.Headers["Authorization"];
+             if (String.IsNullOrEmpty(token) || !_loginManager.IsTokenValid(token))
+             {
+-                context.Result = new JsonResult(new { Message = "Invalid authorization token" })
++                context.Result = new JsonResult(new { Message = $"Invalid authorization token" })
+                 { StatusCode = 401 };
+             } else if (!_loginManager.IsRoleValid(_roles, token))
+             {
+diff --git a/Codigo/Backend/PharmaGo.WebApi/Models/In/ProductModel.cs b/Codigo/Backend/PharmaGo.WebApi/Models/In/ProductModel.cs
+new file mode 100644
+index 0000000..aa50e32
+--- /dev/null
++++ b/Codigo/Backend/PharmaGo.WebApi/Models/In/ProductModel.cs
+@@ -0,0 +1,26 @@
++﻿using PharmaGo.Domain.Entities;
++
++namespace PharmaGo.WebApi.Models.In
++{
++    public class ProductModel
++    {
++        public int Code { get; set; }
++        public string Name { get; set; }
++        public decimal Price { get; set; }
++        public string Description { get; set; }
++        public int Stock { get; set; }
++        public Product ToEntity()
++        {
++            return new Product()
++            {
++                Code = this.Code,
++                Name = this.Name,
++                Price = this.Price,
++                Description = this.Description,
++                Deleted = false,
++                Pharmacy = new Pharmacy() { },
++                Stock = this.Stock
++            };
++        }
++    }
++}
+diff --git a/Codigo/Backend/PharmaGo.WebApi/Models/In/PurchaseAuthorizationModel.cs b/Codigo/Backend/PharmaGo.WebApi/Models/In/PurchaseAuthorizationModel.cs
+index 04101a7..ac4e87d 100644
+--- a/Codigo/Backend/PharmaGo.WebApi/Models/In/PurchaseAuthorizationModel.cs
++++ b/Codigo/Backend/PharmaGo.WebApi/Models/In/PurchaseAuthorizationModel.cs
+@@ -5,6 +5,7 @@
+     {
+         public int pharmacyId { get; set; }
+         public string drugCode { get; set; }
++        public int productCode { get; set; }
+ 
+     }
+ }
+diff --git a/Codigo/Backend/PharmaGo.WebApi/Models/In/PurchaseModelRequest.cs b/Codigo/Backend/PharmaGo.WebApi/Models/In/PurchaseModelRequest.cs
+index e6170bc..89ec75e 100644
+--- a/Codigo/Backend/PharmaGo.WebApi/Models/In/PurchaseModelRequest.cs
++++ b/Codigo/Backend/PharmaGo.WebApi/Models/In/PurchaseModelRequest.cs
+@@ -13,6 +13,7 @@ namespace PharmaGo.WebApi.Models.In
+         public class PurchaseDetailModelRequest {
+             public int PharmacyId { get; set; }
+             public string Code { get; set; }
++            public int ProductCode { get; set; }
+             public int Quantity { get; set; }
+         }
+ 
+diff --git a/Codigo/Backend/PharmaGo.WebApi/Models/In/UpdateProductModelIn.cs b/Codigo/Backend/PharmaGo.WebApi/Models/In/UpdateProductModelIn.cs
+new file mode 100644
+index 0000000..133f6a7
+--- /dev/null
++++ b/Codigo/Backend/PharmaGo.WebApi/Models/In/UpdateProductModelIn.cs
+@@ -0,0 +1,21 @@
++﻿using PharmaGo.Domain.Entities;
++
++namespace PharmaGo.WebApi.Models.In
++{
++    public class UpdateProductModelIn
++    {
++        public string? Name { get; set; }
++        public string? Description { get; set; }
++        public decimal? Price { get; set; }
++
++        public Product ToEntity()
++        {
++            return new Product()
++            {
++                Name = Name,
++                Description = Description,
++                Price = Price ?? 0
++            };
++        }
++    }
++}
+diff --git a/Codigo/Backend/PharmaGo.WebApi/Models/Out/ProductModelOut.cs b/Codigo/Backend/PharmaGo.WebApi/Models/Out/ProductModelOut.cs
+new file mode 100644
+index 0000000..36897e0
+--- /dev/null
++++ b/Codigo/Backend/PharmaGo.WebApi/Models/Out/ProductModelOut.cs
+@@ -0,0 +1,31 @@
++﻿using PharmaGo.Domain.Entities;
++
++namespace PharmaGo.WebApi.Models.Out
++{
++    public class ProductModelOut
++    {
++        public int Id { get; set; }
++        public int Code { get; set; }
++        public string Name { get; set; }
++        public string Description { get; set; }
++        public decimal Price { get; set; }
++        public int Stock { get; set; }
++        public Pharmacy Pharmacy { get; set; }
++
++        public ProductModelOut(Product product)
++        {
++            Id = product.Id;
++            Code = product.Code;
++            Name = product.Name;
++            Description = product.Description;
++            Price = product.Price;
++            Stock = product.Stock;
++            Pharmacy = new Pharmacy
++            {
++                Name = product.Pharmacy.Name,
++                Address = product.Pharmacy.Address,
++                Id = product.Pharmacy.Id,
++            };
++        }
++    }
++}
+diff --git a/Codigo/Backend/PharmaGo.WebApi/Models/Out/PurchaseDetailModelResponse.cs b/Codigo/Backend/PharmaGo.WebApi/Models/Out/PurchaseDetailModelResponse.cs
+index 1c5913f..a83438c 100644
+--- a/Codigo/Backend/PharmaGo.WebApi/Models/Out/PurchaseDetailModelResponse.cs
++++ b/Codigo/Backend/PharmaGo.WebApi/Models/Out/PurchaseDetailModelResponse.cs
+@@ -14,6 +14,8 @@ namespace PharmaGo.WebApi.Models.Out
+         public string PharmacyName { get; set; }
+         public string DrugCode { get; set; }
+         public string DrugName { get; set; }
++        public int ProductCode { get; set; }
++        public string ProductName { get; set; }
+         public PurchaseDetailModelResponse(int id, PurchaseDetail detail) {
+             PurchaseId = id;
+             PurchaseDetailId = detail.Id;
+@@ -22,8 +24,10 @@ namespace PharmaGo.WebApi.Models.Out
+             Quantity = detail.Quantity;
+             PharmacyId = detail.Pharmacy.Id;
+             PharmacyName = detail.Pharmacy.Name;
+-            DrugCode = detail.Drug.Code;
+-            DrugName = detail.Drug.Name;
++            DrugCode = detail?.Drug?.Code ?? "";
++            DrugName = detail?.Drug?.Name ?? "";
++            ProductCode = detail?.Product?.Code ?? 0;
++            ProductName = detail?.Product?.Name ?? "";
+         }
+     }
+ }
+diff --git a/Codigo/Backend/PharmaGo.WebApi/Models/Out/PurchaseModelResponse.cs b/Codigo/Backend/PharmaGo.WebApi/Models/Out/PurchaseModelResponse.cs
+index c4e0400..58a387f 100644
+--- a/Codigo/Backend/PharmaGo.WebApi/Models/Out/PurchaseModelResponse.cs
++++ b/Codigo/Backend/PharmaGo.WebApi/Models/Out/PurchaseModelResponse.cs
+@@ -17,6 +17,7 @@ namespace PharmaGo.WebApi.Models.Out
+         {
+             public int Id { get; set; }
+             public string Code { get; set; }
++            public int ProductCode { get; set; }
+             public string Name { get; set; }
+             public int Quantity { get; set; }
+             public decimal Price { get; set; }
+@@ -36,10 +37,10 @@ namespace PharmaGo.WebApi.Models.Out
+             if (purchase.details != null) {
+                 foreach (var detail in purchase.details) {
+                     Details.Add(new PurchaseDetailModelResponse {
+-                        Id = detail.Id,         
+-                        Name = detail.Drug.Name, 
+-                        Code = detail.Drug.Code, 
+-                        Price = detail.Drug.Price, 
++                        Id = detail.Id,
++                        Name = detail?.Drug?.Name ?? detail.Product.Name, 
++                        Code = detail?.Drug?.Code ?? detail.Product.Code.ToString(),
++                        Price = detail?.Drug?.Price ?? detail.Product.Price, 
+                         Quantity = detail.Quantity,
+                         PharmacyId = detail.Pharmacy.Id,
+                         PharmacyName = detail.Pharmacy.Name,
+diff --git a/Codigo/Backend/PharmaGo.WebApi/Models/Out/UpdateProductModelOut.cs b/Codigo/Backend/PharmaGo.WebApi/Models/Out/UpdateProductModelOut.cs
+new file mode 100644
+index 0000000..186a59e
+--- /dev/null
++++ b/Codigo/Backend/PharmaGo.WebApi/Models/Out/UpdateProductModelOut.cs
+@@ -0,0 +1,24 @@
++﻿using PharmaGo.Domain.Entities;
++
++namespace PharmaGo.WebApi.Models.Out
++{
++    public class UpdateProductModelOut
++    {
++        public int Id { get; set; }
++        public int Code { get; set; }
++        public string Name { get; set; }
++        public string Description { get; set; }
++        public decimal Price { get; set; }
++        public int Stock { get; set; }
++
++        public UpdateProductModelOut(Product product)
++        {
++            Id = product.Id;
++            Code = product.Code;
++            Name = product.Name;
++            Description = product.Description;
++            Price = product.Price;
++            Stock = product.Stock;
++        }
++    }
++}
+diff --git a/Codigo/Backend/PharmaGo.sln b/Codigo/Backend/PharmaGo.sln
+index 5f3eb80..4700e6b 100644
+--- a/Codigo/Backend/PharmaGo.sln
++++ b/Codigo/Backend/PharmaGo.sln
+@@ -29,7 +29,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ExportationModel", "Exporta
+ EndProject
+ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JSONExporter", "JSONExporter\JSONExporter.csproj", "{FADD2A7B-537F-4142-9028-10EF0967DA46}"
+ EndProject
+-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XMLExporter", "XMLExporter\XMLExporter.csproj", "{6975A2F8-1659-40EA-B9E1-1C1EE8464EF6}"
++Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XMLExporter", "XMLExporter\XMLExporter.csproj", "{6975A2F8-1659-40EA-B9E1-1C1EE8464EF6}"
++EndProject
++Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpecFlowPharmaGo.WebApi", "SpecFlowPharmaGo.WebApi\SpecFlowPharmaGo.WebApi.csproj", "{D0544C55-0209-4FA1-B6BD-1E944E996609}"
+ EndProject
+ Global
+ 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+@@ -85,6 +87,10 @@ Global
+ 		{6975A2F8-1659-40EA-B9E1-1C1EE8464EF6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+ 		{6975A2F8-1659-40EA-B9E1-1C1EE8464EF6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+ 		{6975A2F8-1659-40EA-B9E1-1C1EE8464EF6}.Release|Any CPU.Build.0 = Release|Any CPU
++		{D0544C55-0209-4FA1-B6BD-1E944E996609}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
++		{D0544C55-0209-4FA1-B6BD-1E944E996609}.Debug|Any CPU.Build.0 = Debug|Any CPU
++		{D0544C55-0209-4FA1-B6BD-1E944E996609}.Release|Any CPU.ActiveCfg = Release|Any CPU
++		{D0544C55-0209-4FA1-B6BD-1E944E996609}.Release|Any CPU.Build.0 = Release|Any CPU
+ 	EndGlobalSection
+ 	GlobalSection(SolutionProperties) = preSolution
+ 		HideSolutionNode = FALSE
+diff --git a/Codigo/Backend/PharnaGo.Test/BusinessLogic.Test/ProductManagerTest.cs b/Codigo/Backend/PharnaGo.Test/BusinessLogic.Test/ProductManagerTest.cs
+new file mode 100644
+index 0000000..fdf32c2
+--- /dev/null
++++ b/Codigo/Backend/PharnaGo.Test/BusinessLogic.Test/ProductManagerTest.cs
+@@ -0,0 +1,156 @@
++﻿using Moq;
++using NuGet.Common;
++using PharmaGo.BusinessLogic;
++using PharmaGo.DataAccess.Repositories;
++using PharmaGo.Domain.Entities;
++using PharmaGo.Exceptions;
++using PharmaGo.IBusinessLogic;
++using PharmaGo.IDataAccess;
++using PharmaGo.WebApi.Models.In;
++using System.Diagnostics.CodeAnalysis;
++using System.Linq.Expressions;
++
++namespace PharmaGo.Test.BusinessLogic.Test
++{
++    [TestClass]
++    [ExcludeFromCodeCoverage]
++    public class ProductManagerTest
++    {
++        private Mock<IRepository<Product>> _productRepository;
++        private ProductManager _productManager;
++        private Product product, nullProduct;
++        private Pharmacy pharmacy;
++        private string token = "c80da9ed-1b41-4768-8e34-b728cae25d2f";
++        private const Pharmacy nullPharmacy = null;
++
++        private Mock<IRepository<Pharmacy>> _pharmacyRepository;
++        private Mock<IRepository<User>> _userRepository;
++        private Mock<IRepository<Session>> _sessionRepository;
++        private Session session = null;
++        private User user = null;
++        private ProductModel productModel;
++
++        [TestInitialize]
++        public void InitTest()
++        {
++            _productRepository = new Mock<IRepository<Product>>();
++            _userRepository = new Mock<IRepository<User>>();
++            _sessionRepository = new Mock<IRepository<Session>>();
++            _pharmacyRepository = new Mock<IRepository<Pharmacy>>();
++            _productManager = new ProductManager(_productRepository.Object, _sessionRepository.Object, _userRepository.Object, _pharmacyRepository.Object );
++            pharmacy = new Pharmacy() { Id = 1, Name = "pharmacy", Address = "address", Users = new List<User>() };
++            product = new Product()
++            {
++                Id = 1,
++                Code = 12345,
++                Name = "Shampoo Sedal 200 ml",
++                Description = "Dale vida a tu pelo con el nuevo shampoo Sedal",
++                Price = 75,
++                Deleted = false,
++                Pharmacy = pharmacy
++            };
++            session = new Session { Id = 1, Token = new Guid(token), UserId = 1 };
++            user = new User() { Id = 1, UserName = "test", Email = "test@gmail.com", Address = "test" };
++            nullProduct = null;
++            pharmacy = new Pharmacy() { Id = 1, Name = "pharmacy", Address = "address", Users = new List<User>() };
++            productModel = new ProductModel()
++            {
++                Code = 65141,
++                Name = "name",
++                Price = 200,
++                Description = "test"
++            };
++            session = new Session { Id = 1, Token = new Guid(token), UserId = 1 };
++            user = new User() { Id = 1, UserName = "test", Email = "test@gmail.com", Address = "test" };
++        }
++
++        [TestMethod]
++        public void DeleteProductOk()
++        {
++            _productRepository.Setup(r => r.GetOneByExpression(It.IsAny<Expression<Func<Product, bool>>>())).Returns(product);
++            _productRepository.Setup(x => x.UpdateOne(product));
++            _productRepository.Setup(x => x.Save());
++            _productManager.Delete(product.Id);
++            _productRepository.VerifyAll();
++        }
++        
++        [TestMethod]
++        [ExpectedException(typeof(ResourceNotFoundException))]
++        public void DeleteNullProduct()
++        {
++            _productRepository.Setup(r => r.GetOneByExpression(It.IsAny<Expression<Func<Product, bool>>>())).Returns(nullProduct);
++            _productManager.Delete(product.Id);
++            _productRepository.VerifyAll();
++        }
++
++        [TestMethod]
++        public void GetProducts()
++        {
++            _productRepository.Setup(r => r.GetAllByExpression(It.IsAny<Expression<Func<Product, bool>>>())).Returns(new List<Product>());
++
++            var products = _productManager.GetProducts();
++
++            Assert.IsInstanceOfType(products, typeof(List<Product>));
++        }
++
++        [TestMethod]
++        public void UpdateProduct()
++        {
++            _productRepository.Setup(r => r.GetOneByExpression(It.IsAny<Expression<Func<Product, bool>>>())).Returns(new Product());
++            _productRepository.Setup(r => r.UpdateOne(It.IsAny<Product>()));
++
++            var product = _productManager.UpdateProduct(0, new Product()
++            {
++                Description = "Test",
++                Price = 10,
++                Name = "Test"
++            });
++
++            Assert.IsInstanceOfType(product, typeof(Product));
++        }
++
++        [TestMethod]
++        public void CreateProductOk()
++        {
++            _productRepository.Setup(r => r.Exists(It.IsAny<Expression<Func<Product, bool>>>())).Returns(false);
++            _pharmacyRepository.Setup(r => r.GetOneByExpression(It.IsAny<Expression<Func<Pharmacy, bool>>>())).Returns(pharmacy);
++            
++            _sessionRepository.Setup(r => r.GetOneByExpression(It.IsAny<Expression<Func<Session, bool>>>())).Returns(session);
++            _userRepository.Setup(r => r.GetOneDetailByExpression(It.IsAny<Expression<Func<User, bool>>>())).Returns(user);
++            _productRepository.Setup(x => x.InsertOne(It.IsAny<Product>()));
++            _productRepository.Setup(x => x.Save());
++
++            var productReturned = _productManager.Create(productModel.ToEntity(), token);
++
++            // Assert
++            _productRepository.VerifyAll();
++            Assert.AreNotEqual(productReturned.Id, 1);
++        }
++
++        [TestMethod]
++        [ExpectedException(typeof(ResourceNotFoundException))]
++        public void CreateProductWithExistentCode()
++        {
++            _sessionRepository.Setup(r => r.GetOneByExpression(It.IsAny<Expression<Func<Session, bool>>>())).Returns(session);
++            _userRepository.Setup(r => r.GetOneDetailByExpression(It.IsAny<Expression<Func<User, bool>>>())).Returns(user);
++            var drugReturned = _productManager.Create(product, token);
++        }
++
++        [TestMethod]
++        [ExpectedException(typeof(ResourceNotFoundException))]
++        public void CreateNullProduct()
++        {
++            var drugReturned = _productManager.Create(null, token);
++        }
++
++        [TestMethod]
++        [ExpectedException(typeof(ResourceNotFoundException))]
++        public void CreateDrugNullProduct()
++        {
++            _sessionRepository.Setup(r => r.GetOneByExpression(It.IsAny<Expression<Func<Session, bool>>>())).Returns(session);
++            _userRepository.Setup(r => r.GetOneDetailByExpression(It.IsAny<Expression<Func<User, bool>>>())).Returns(user);
++            _pharmacyRepository.Setup(r => r.GetOneByExpression(It.IsAny<Expression<Func<Pharmacy, bool>>>())).Returns(nullPharmacy);
++            var drugReturned = _productManager.Create(product, token);
++        }
++    }
++}
+diff --git a/Codigo/Backend/PharnaGo.Test/BusinessLogic.Test/PurchasesManagerTests.cs b/Codigo/Backend/PharnaGo.Test/BusinessLogic.Test/PurchasesManagerTests.cs
+index 2a1bb31..e51be6f 100644
+--- a/Codigo/Backend/PharnaGo.Test/BusinessLogic.Test/PurchasesManagerTests.cs
++++ b/Codigo/Backend/PharnaGo.Test/BusinessLogic.Test/PurchasesManagerTests.cs
+@@ -16,6 +16,7 @@ namespace PharmaGo.Test.BusinessLogic.Test
+         private Mock<IRepository<Purchase>> _purchaseRespository;
+         private Mock<IRepository<Pharmacy>> _pharmacyRespository;
+         private Mock<IRepository<Drug>> _drugsRespository;
++        private Mock<IRepository<Product>> _productsRespository;
+         private Mock<IRepository<User>> _userRespository;
+         private Mock<IRepository<Session>> _sessionRespository;
+         private Mock<IRepository<PurchaseDetail>> _purchaseDetailRespository;
+@@ -41,10 +42,11 @@ namespace PharmaGo.Test.BusinessLogic.Test
+             _purchaseRespository = new Mock<IRepository<Purchase>>(MockBehavior.Strict);
+             _pharmacyRespository = new Mock<IRepository<Pharmacy>>(MockBehavior.Strict);
+             _drugsRespository = new Mock<IRepository<Drug>>(MockBehavior.Strict);
++            _productsRespository = new Mock<IRepository<Product>>(MockBehavior.Strict);
+             _userRespository = new Mock<IRepository<User>>(MockBehavior.Strict);
+             _sessionRespository = new Mock<IRepository<Session>>(MockBehavior.Strict);
+             _purchaseDetailRespository = new Mock<IRepository<PurchaseDetail>>(MockBehavior.Strict);
+-            _purchasesManager = new PurchasesManager(_purchaseRespository.Object, _pharmacyRespository.Object, _drugsRespository.Object,
++            _purchasesManager = new PurchasesManager(_purchaseRespository.Object, _pharmacyRespository.Object, _drugsRespository.Object, _productsRespository.Object,
+             _purchaseDetailRespository.Object, _sessionRespository.Object, _userRespository.Object);
+ 
+             unitMeasure1 = new UnitMeasure { Id = 1, Deleted = false, Name = "ml" };
+@@ -513,7 +515,7 @@ namespace PharmaGo.Test.BusinessLogic.Test
+             _purchaseDetailRespository.Setup(c => c.Save());
+ 
+             //Act
+-            var response = _purchasesManager.ApprobePurchaseDetail(1, 1, "XF324");
++            var response = _purchasesManager.ApprobePurchaseDetail(1, 1, "XF324", 0);
+ 
+             //Assert
+             Assert.IsNotNull(response);
+@@ -532,7 +534,7 @@ namespace PharmaGo.Test.BusinessLogic.Test
+                 .Returns(p);
+ 
+             //Act
+-            var response = _purchasesManager.ApprobePurchaseDetail(0, 1, "XF324");
++            var response = _purchasesManager.ApprobePurchaseDetail(0, 1, "XF324", 0);
+         }
+ 
+         [TestMethod]
+@@ -546,7 +548,7 @@ namespace PharmaGo.Test.BusinessLogic.Test
+                 .Returns(purchase);
+ 
+             //Act
+-            var response = _purchasesManager.ApprobePurchaseDetail(1, 1, "XF32000");
++            var response = _purchasesManager.ApprobePurchaseDetail(1, 1, "XF32000", 0);
+         }
+ 
+         [TestMethod]
+@@ -563,7 +565,7 @@ namespace PharmaGo.Test.BusinessLogic.Test
+                 .Returns(pharmacy);
+ 
+             //Act
+-            var response = _purchasesManager.ApprobePurchaseDetail(1, 1, "XF324");
++            var response = _purchasesManager.ApprobePurchaseDetail(1, 1, "XF324", 0);
+         }
+ 
+         [TestMethod]
+@@ -580,7 +582,7 @@ namespace PharmaGo.Test.BusinessLogic.Test
+                 .Returns(pharmacy);
+ 
+             //Act
+-            var response = _purchasesManager.ApprobePurchaseDetail(1, 1, "XF324");
++            var response = _purchasesManager.ApprobePurchaseDetail(1, 1, "XF324", 0);
+         }
+ 
+         [TestMethod]
+@@ -598,7 +600,7 @@ namespace PharmaGo.Test.BusinessLogic.Test
+                 .Returns(pharmacy);
+ 
+             //Act
+-            var response = _purchasesManager.ApprobePurchaseDetail(1, 1, "XF324");
++            var response = _purchasesManager.ApprobePurchaseDetail(1, 1, "XF324", 0); ;
+         }
+ 
+         // reject
+@@ -619,7 +621,7 @@ namespace PharmaGo.Test.BusinessLogic.Test
+             _purchaseRespository.Setup(y => y.Save());
+ 
+             //Act
+-            var response = _purchasesManager.RejectPurchaseDetail(1, 1, "XF324");
++            var response = _purchasesManager.RejectPurchaseDetail(1, 1, "XF324", 0);
+ 
+             //Assert
+             Assert.IsNotNull(response);
+@@ -638,7 +640,7 @@ namespace PharmaGo.Test.BusinessLogic.Test
+                 .Returns(p);
+ 
+             //Act
+-            var response = _purchasesManager.RejectPurchaseDetail(0, 1, "XF324");
++            var response = _purchasesManager.RejectPurchaseDetail(0, 1, "XF324", 0);
+         }
+ 
+         [TestMethod]
+@@ -651,7 +653,7 @@ namespace PharmaGo.Test.BusinessLogic.Test
+                 .Returns(purchase);
+ 
+             //Act
+-            var response = _purchasesManager.RejectPurchaseDetail(1, 1, "XF32000");
++            var response = _purchasesManager.RejectPurchaseDetail(1, 1, "XF32000", 0);
+         }
+ 
+         [TestMethod]
+@@ -668,7 +670,7 @@ namespace PharmaGo.Test.BusinessLogic.Test
+                 .Returns(pharmacy);
+ 
+             //Act
+-            var response = _purchasesManager.RejectPurchaseDetail(1, 1, "XF324");
++            var response = _purchasesManager.RejectPurchaseDetail(1, 1, "XF324", 0);
+         }
+ 
+         [TestMethod]
+@@ -685,7 +687,7 @@ namespace PharmaGo.Test.BusinessLogic.Test
+                 .Returns(pharmacy);
+ 
+             //Act
+-            var response = _purchasesManager.RejectPurchaseDetail(1, 1, "XF324");
++            var response = _purchasesManager.RejectPurchaseDetail(1, 1, "XF324", 0);
+         }
+ 
+     }
+diff --git a/Codigo/Backend/PharnaGo.Test/DataAccess.Test/ProductRepositoryTest.cs b/Codigo/Backend/PharnaGo.Test/DataAccess.Test/ProductRepositoryTest.cs
+new file mode 100644
+index 0000000..f124962
+--- /dev/null
++++ b/Codigo/Backend/PharnaGo.Test/DataAccess.Test/ProductRepositoryTest.cs
+@@ -0,0 +1,164 @@
++﻿using Microsoft.EntityFrameworkCore;
++using PharmaGo.DataAccess;
++using PharmaGo.DataAccess.Repositories;
++using PharmaGo.Domain.Entities;
++using System;
++using System.Collections.Generic;
++using System.Linq;
++using System.Text;
++using System.Threading.Tasks;
++
++namespace PharmaGo.Test.DataAccess.Test
++{
++   
++        [TestClass]
++        [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
++        public class ProductRepositoryTests
++        {
++            private PharmacyGoDbContext context;
++            private List<Product> productsSaved;
++            private ProductRepository _productRepository;
++            private const int invalidId = 500;
++            private Pharmacy pharmacy;
++            private Product newProduct;
++            private const int invalidProductCode = 9999999;
++
++            [TestInitialize]
++            public void InitTest()
++            {
++                productsSaved = new List<Product>();
++                pharmacy = new Pharmacy() { Id = 1, Name = "pharmacy", Address = "address", Users = new List<User>() };
++                newProduct = new Product()
++                {
++                    Id = 1,
++                    Code = 1,
++                    Name = "newdrugName",
++                    Description = "newproductdescription",
++                    Price = 50,
++                    Pharmacy = new Pharmacy()
++                    {
++                        Id = pharmacy.Id
++                    }
++                };
++            }
++
++            [TestCleanup]
++            public void CleanUp()
++            {
++                context.Database.EnsureDeleted();
++            }
++
++            private void CreateDataBase(string name)
++            {
++                productsSaved = CreateDummyProducts();
++                var options = new DbContextOptionsBuilder<PharmacyGoDbContext>().UseInMemoryDatabase(databaseName: name).Options;
++                context = new PharmacyGoDbContext(options);
++                productsSaved.ForEach(p => context.Set<Product>().Add(p));
++                context.Set<Product>().Include("Pharmacy");
++                context.SaveChanges();
++                _productRepository = new ProductRepository(context);
++            }
++
++            [TestMethod]
++            public void GetAllProductsOfPharmacyOk()
++            {
++                CreateDataBase("getProductsTestDb");
++                var retrievedProducts = _productRepository.GetAllByExpression(p => true);
++                Assert.AreEqual(10, retrievedProducts.Count());
++            }
++
++           
++
++            [TestMethod]
++            public void GetDrugsByIdOk()
++            {
++                CreateDataBase("getProductsByIdTestDb");
++                Product product = productsSaved[0];
++                var retrievedProduct = _productRepository.GetOneByExpression(p => p.Id == product.Id);
++                Assert.AreEqual(product.Code, retrievedProduct.Code);
++            }
++
++            [TestMethod]
++            public void GetProductsByIdNotExists()
++            {
++                CreateDataBase("getProductsByIdNotExistTestDb");
++                var retrievedProduct = _productRepository.GetOneByExpression(p => p.Id == invalidId);
++                Assert.AreEqual(null, retrievedProduct);
++            }
++
++            [TestMethod]
++            public void InsertProductOk()
++            {
++                CreateDataBase("insertProductTestDb");
++                 newProduct.Id = 9999;
++                 newProduct.Pharmacy.Id = 9999;
++                _productRepository.DeleteOne(newProduct);
++                _productRepository.InsertOne(newProduct);
++                _productRepository.Save();
++                var retrievedProduct = _productRepository.GetOneByExpression(p => p.Id == newProduct.Id);
++                Assert.AreEqual(retrievedProduct.Code, newProduct.Code);
++            }
++
++            [TestMethod]
++            public void ExistProductOk()
++            {
++                CreateDataBase("ExistProductTestDb");
++                bool exists = _productRepository.Exists(p => p.Code == productsSaved[0].Code);
++                Assert.IsTrue(exists);
++            }
++
++            [TestMethod]
++            public void ExistProductFalse()
++            {
++                CreateDataBase("ExistFalseDrugTestDb");
++                bool exists = _productRepository.Exists(p => p.Code == invalidProductCode);
++                Assert.IsFalse(exists);
++            }
++
++            [TestMethod]
++            public void DeleteProductOk()
++            {
++                CreateDataBase("deleteProductTestDb");
++                Product toDelete = productsSaved[0];
++                _productRepository.DeleteOne(toDelete);
++                _productRepository.Save();
++                var productsReturned = _productRepository.GetAllByExpression(d => d.Code == toDelete.Code && d.Pharmacy.Name == toDelete.Pharmacy.Name);
++                Assert.IsTrue(productsReturned.Count() == 0);
++            }
++
++            [TestMethod]
++            public void UpdateProductOk()
++            {
++                CreateDataBase("updateDrugTestDb");
++                var productFromDb = _productRepository.GetOneByExpression(d => d.Code == productsSaved[0].Code);
++                var dbName = productFromDb.Name;
++                productFromDb.Name = "updatedName";
++                _productRepository.UpdateOne(productFromDb);
++                _productRepository.Save();
++                var productUpdated = _productRepository.GetOneByExpression(d => d.Code == productsSaved[0].Code);
++                Assert.AreNotEqual(dbName, productUpdated.Name);
++            }
++
++            private List<Product> CreateDummyProducts()
++            {
++                Pharmacy pharmacy = new Pharmacy() { Id = 1, Name = "pharmacy", Address = "address", Users = new List<User>() };
++                var productList = new List<Product>();
++                for (int i = 1; i < 11; i++)
++                {
++                    productList.Add(new Product()
++                    {
++                        Id = i,
++                        Code = i,
++                        Name = $"productName{i}",
++                        Description = $"testProduct{i}",
++                        Price = 100,
++
++
++                        Pharmacy = pharmacy
++                    });
++                }
++                return productList;
++            }
++        }
++    }
++
+diff --git a/Codigo/Backend/PharnaGo.Test/WebApi.Test/ProductsControllerTest.cs b/Codigo/Backend/PharnaGo.Test/WebApi.Test/ProductsControllerTest.cs
+new file mode 100644
+index 0000000..a25fcf6
+--- /dev/null
++++ b/Codigo/Backend/PharnaGo.Test/WebApi.Test/ProductsControllerTest.cs
+@@ -0,0 +1,80 @@
++﻿using Microsoft.AspNetCore.Mvc;
++using Moq;
++using PharmaGo.Domain.Entities;
++using PharmaGo.Exceptions;
++using PharmaGo.IBusinessLogic;
++using PharmaGo.WebApi.Controllers;
++using PharmaGo.WebApi.Models.In;
++using PharmaGo.WebApi.Models.Out;
++
++namespace PharmaGo.Test.WebApi.Test
++{
++    [TestClass]
++    public class ProductsControllerTest
++    {
++        private ProductsController _productsController;
++        private Mock<IProductManager> _productsManagerMock;
++
++        [TestInitialize]
++        public void SetUp()
++        {
++            _productsManagerMock = new Mock<IProductManager>(MockBehavior.Strict);
++            _productsController = new ProductsController(_productsManagerMock.Object);
++        }
++
++        [TestCleanup]
++        public void Cleanup()
++        {
++            _productsManagerMock.VerifyAll();
++        }
++
++        [TestMethod]
++        public void GetProductsOk()
++        {
++            //Arrange
++            _productsManagerMock
++                .Setup(service => service.GetProducts())
++                .Returns(new List<Product>());
++
++            //Act
++            var result = _productsController.GetProducts();
++
++            //Assert
++            var objectResult = result as OkObjectResult;
++            var statusCode = objectResult.StatusCode;
++            var value = objectResult.Value;
++
++            //Assert
++            Assert.IsInstanceOfType(value, typeof(IEnumerable<ProductModelOut>));
++        }
++
++
++        [TestMethod]
++        public void UpdateProductOk()
++        {
++            //Arrange
++            _productsManagerMock
++                .Setup(service => service.UpdateProduct(It.IsAny<int>(), It.IsAny<Product>()))
++                .Returns(new Product()
++                {
++                    Pharmacy = new Pharmacy()
++                    {
++                        Name = "test",
++                        Address = "test",
++                        Id = 0,
++                    }
++                });
++
++            //Act
++            var result = _productsController.UpdateProduct(0, new UpdateProductModelIn());
++
++            //Assert
++            var objectResult = result as OkObjectResult;
++            var statusCode = objectResult.StatusCode;
++            var value = objectResult.Value;
++
++            //Assert
++            Assert.IsInstanceOfType(value, typeof(UpdateProductModelOut));
++        }
++    }
++}
+diff --git a/Codigo/Backend/PharnaGo.Test/WebApi.Test/PurchasesControllerTests.cs b/Codigo/Backend/PharnaGo.Test/WebApi.Test/PurchasesControllerTests.cs
+index 911754a..49b1cd5 100644
+--- a/Codigo/Backend/PharnaGo.Test/WebApi.Test/PurchasesControllerTests.cs
++++ b/Codigo/Backend/PharnaGo.Test/WebApi.Test/PurchasesControllerTests.cs
+@@ -279,7 +279,7 @@ namespace PharmaGo.Test.WebApi.Test
+             purchaseDetail.ElementAt(0).Status = "Approved";
+ 
+             _purchasesManagerMock
+-                .Setup(service => service.ApprobePurchaseDetail(1, model.pharmacyId, model.drugCode))
++                .Setup(service => service.ApprobePurchaseDetail(1, model.pharmacyId, model.drugCode, 0))
+                 .Returns(purchaseDetail.ElementAt(0));
+ 
+             //Act
+@@ -306,7 +306,7 @@ namespace PharmaGo.Test.WebApi.Test
+             purchaseDetail.ElementAt(0).Status = "Rejected";
+ 
+             _purchasesManagerMock
+-                .Setup(service => service.RejectPurchaseDetail(1, model.pharmacyId, model.drugCode))
++                .Setup(service => service.RejectPurchaseDetail(1, model.pharmacyId, model.drugCode, 0))
+                 .Returns(purchaseDetail.ElementAt(0));
+ 
+             //Act
+diff --git a/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/DeleteProduct.feature b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/DeleteProduct.feature
+new file mode 100644
+index 0000000..c0470d8
+--- /dev/null
++++ b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/DeleteProduct.feature
+@@ -0,0 +1,12 @@
++﻿Feature: DeleteProduct
++
++Narrativa:
++Como empleado de una farmacia
++Quiero borrar un producto
++Para que no esté disponible para la venta
++
++@mytag
++Scenario: Delete an existing product
++	Given The id 1 of a product
++	When try to delete the product
++	Then the product has been successfully  deleted
+\ No newline at end of file
+diff --git a/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/DeleteProduct.feature.cs b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/DeleteProduct.feature.cs
+new file mode 100644
+index 0000000..5fa67d4
+--- /dev/null
++++ b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/DeleteProduct.feature.cs
+@@ -0,0 +1,145 @@
++﻿// ------------------------------------------------------------------------------
++//  <auto-generated>
++//      This code was generated by SpecFlow (https://www.specflow.org/).
++//      SpecFlow Version:3.9.0.0
++//      SpecFlow Generator Version:3.9.0.0
++// 
++//      Changes to this file may cause incorrect behavior and will be lost if
++//      the code is regenerated.
++//  </auto-generated>
++// ------------------------------------------------------------------------------
++#region Designer generated code
++#pragma warning disable
++namespace SpecFlowPharmaGo.WebApi.Features
++{
++    using TechTalk.SpecFlow;
++    using System;
++    using System.Linq;
++    
++    
++    [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
++    [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
++    public partial class DeleteProductFeature : object, Xunit.IClassFixture<DeleteProductFeature.FixtureData>, System.IDisposable
++    {
++        
++        private static TechTalk.SpecFlow.ITestRunner testRunner;
++        
++        private string[] _featureTags = ((string[])(null));
++        
++        private Xunit.Abstractions.ITestOutputHelper _testOutputHelper;
++        
++#line 1 "DeleteProduct.feature"
++#line hidden
++        
++        public DeleteProductFeature(DeleteProductFeature.FixtureData fixtureData, SpecFlowPharmaGo_WebApi_XUnitAssemblyFixture assemblyFixture, Xunit.Abstractions.ITestOutputHelper testOutputHelper)
++        {
++            this._testOutputHelper = testOutputHelper;
++            this.TestInitialize();
++        }
++        
++        public static void FeatureSetup()
++        {
++            testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
++            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "DeleteProduct", "Narrativa:\r\nComo empleado de una farmacia\r\nQuiero borrar un producto\r\nPara que no" +
++                    " esté disponible para la venta", ProgrammingLanguage.CSharp, ((string[])(null)));
++            testRunner.OnFeatureStart(featureInfo);
++        }
++        
++        public static void FeatureTearDown()
++        {
++            testRunner.OnFeatureEnd();
++            testRunner = null;
++        }
++        
++        public virtual void TestInitialize()
++        {
++        }
++        
++        public virtual void TestTearDown()
++        {
++            testRunner.OnScenarioEnd();
++        }
++        
++        public virtual void ScenarioInitialize(TechTalk.SpecFlow.ScenarioInfo scenarioInfo)
++        {
++            testRunner.OnScenarioInitialize(scenarioInfo);
++            testRunner.ScenarioContext.ScenarioContainer.RegisterInstanceAs<Xunit.Abstractions.ITestOutputHelper>(_testOutputHelper);
++        }
++        
++        public virtual void ScenarioStart()
++        {
++            testRunner.OnScenarioStart();
++        }
++        
++        public virtual void ScenarioCleanup()
++        {
++            testRunner.CollectScenarioErrors();
++        }
++        
++        void System.IDisposable.Dispose()
++        {
++            this.TestTearDown();
++        }
++        
++        [Xunit.SkippableFactAttribute(DisplayName="Delete an existing product")]
++        [Xunit.TraitAttribute("FeatureTitle", "DeleteProduct")]
++        [Xunit.TraitAttribute("Description", "Delete an existing product")]
++        [Xunit.TraitAttribute("Category", "mytag")]
++        public virtual void DeleteAnExistingProduct()
++        {
++            string[] tagsOfScenario = new string[] {
++                    "mytag"};
++            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
++            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Delete an existing product", null, tagsOfScenario, argumentsOfScenario, this._featureTags);
++#line 9
++this.ScenarioInitialize(scenarioInfo);
++#line hidden
++            bool isScenarioIgnored = default(bool);
++            bool isFeatureIgnored = default(bool);
++            if ((tagsOfScenario != null))
++            {
++                isScenarioIgnored = tagsOfScenario.Where(__entry => __entry != null).Where(__entry => String.Equals(__entry, "ignore", StringComparison.CurrentCultureIgnoreCase)).Any();
++            }
++            if ((this._featureTags != null))
++            {
++                isFeatureIgnored = this._featureTags.Where(__entry => __entry != null).Where(__entry => String.Equals(__entry, "ignore", StringComparison.CurrentCultureIgnoreCase)).Any();
++            }
++            if ((isScenarioIgnored || isFeatureIgnored))
++            {
++                testRunner.SkipScenario();
++            }
++            else
++            {
++                this.ScenarioStart();
++#line 10
++ testRunner.Given("The id 1 of a product", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
++#line hidden
++#line 11
++ testRunner.When("try to delete the product", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
++#line hidden
++#line 12
++ testRunner.Then("the product has been successfully  deleted", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
++#line hidden
++            }
++            this.ScenarioCleanup();
++        }
++        
++        [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
++        [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
++        public class FixtureData : System.IDisposable
++        {
++            
++            public FixtureData()
++            {
++                DeleteProductFeature.FeatureSetup();
++            }
++            
++            void System.IDisposable.Dispose()
++            {
++                DeleteProductFeature.FeatureTearDown();
++            }
++        }
++    }
++}
++#pragma warning restore
++#endregion
+diff --git a/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/GetProducts.feature b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/GetProducts.feature
+new file mode 100644
+index 0000000..2459ddf
+--- /dev/null
++++ b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/GetProducts.feature
+@@ -0,0 +1,11 @@
++﻿Feature: GetProducts
++
++Narrativa:
++Como usuario invitado
++Quiero obtener los productos disponibles
++Para poder ver su código, nombre, descripción y precio
++
++@mytag
++Scenario: Get the list of all products
++	When perform a simple products request
++	Then return a list of products
+\ No newline at end of file
+diff --git a/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/GetProducts.feature.cs b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/GetProducts.feature.cs
+new file mode 100644
+index 0000000..6870b3f
+--- /dev/null
++++ b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/GetProducts.feature.cs
+@@ -0,0 +1,142 @@
++﻿// ------------------------------------------------------------------------------
++//  <auto-generated>
++//      This code was generated by SpecFlow (https://www.specflow.org/).
++//      SpecFlow Version:3.9.0.0
++//      SpecFlow Generator Version:3.9.0.0
++// 
++//      Changes to this file may cause incorrect behavior and will be lost if
++//      the code is regenerated.
++//  </auto-generated>
++// ------------------------------------------------------------------------------
++#region Designer generated code
++#pragma warning disable
++namespace SpecFlowPharmaGo.WebApi.Features
++{
++    using TechTalk.SpecFlow;
++    using System;
++    using System.Linq;
++    
++    
++    [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
++    [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
++    public partial class GetProductsFeature : object, Xunit.IClassFixture<GetProductsFeature.FixtureData>, System.IDisposable
++    {
++        
++        private static TechTalk.SpecFlow.ITestRunner testRunner;
++        
++        private string[] _featureTags = ((string[])(null));
++        
++        private Xunit.Abstractions.ITestOutputHelper _testOutputHelper;
++        
++#line 1 "GetProducts.feature"
++#line hidden
++        
++        public GetProductsFeature(GetProductsFeature.FixtureData fixtureData, SpecFlowPharmaGo_WebApi_XUnitAssemblyFixture assemblyFixture, Xunit.Abstractions.ITestOutputHelper testOutputHelper)
++        {
++            this._testOutputHelper = testOutputHelper;
++            this.TestInitialize();
++        }
++        
++        public static void FeatureSetup()
++        {
++            testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
++            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "GetProducts", "Narrativa:\r\nComo usuario invitado\r\nQuiero obtener los productos disponibles\r\nPara" +
++                    " poder ver su código, nombre, descripción y precio", ProgrammingLanguage.CSharp, ((string[])(null)));
++            testRunner.OnFeatureStart(featureInfo);
++        }
++        
++        public static void FeatureTearDown()
++        {
++            testRunner.OnFeatureEnd();
++            testRunner = null;
++        }
++        
++        public virtual void TestInitialize()
++        {
++        }
++        
++        public virtual void TestTearDown()
++        {
++            testRunner.OnScenarioEnd();
++        }
++        
++        public virtual void ScenarioInitialize(TechTalk.SpecFlow.ScenarioInfo scenarioInfo)
++        {
++            testRunner.OnScenarioInitialize(scenarioInfo);
++            testRunner.ScenarioContext.ScenarioContainer.RegisterInstanceAs<Xunit.Abstractions.ITestOutputHelper>(_testOutputHelper);
++        }
++        
++        public virtual void ScenarioStart()
++        {
++            testRunner.OnScenarioStart();
++        }
++        
++        public virtual void ScenarioCleanup()
++        {
++            testRunner.CollectScenarioErrors();
++        }
++        
++        void System.IDisposable.Dispose()
++        {
++            this.TestTearDown();
++        }
++        
++        [Xunit.SkippableFactAttribute(DisplayName="Get the list of all products")]
++        [Xunit.TraitAttribute("FeatureTitle", "GetProducts")]
++        [Xunit.TraitAttribute("Description", "Get the list of all products")]
++        [Xunit.TraitAttribute("Category", "mytag")]
++        public virtual void GetTheListOfAllProducts()
++        {
++            string[] tagsOfScenario = new string[] {
++                    "mytag"};
++            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
++            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Get the list of all products", null, tagsOfScenario, argumentsOfScenario, this._featureTags);
++#line 9
++this.ScenarioInitialize(scenarioInfo);
++#line hidden
++            bool isScenarioIgnored = default(bool);
++            bool isFeatureIgnored = default(bool);
++            if ((tagsOfScenario != null))
++            {
++                isScenarioIgnored = tagsOfScenario.Where(__entry => __entry != null).Where(__entry => String.Equals(__entry, "ignore", StringComparison.CurrentCultureIgnoreCase)).Any();
++            }
++            if ((this._featureTags != null))
++            {
++                isFeatureIgnored = this._featureTags.Where(__entry => __entry != null).Where(__entry => String.Equals(__entry, "ignore", StringComparison.CurrentCultureIgnoreCase)).Any();
++            }
++            if ((isScenarioIgnored || isFeatureIgnored))
++            {
++                testRunner.SkipScenario();
++            }
++            else
++            {
++                this.ScenarioStart();
++#line 10
++ testRunner.When("perform a simple products request", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
++#line hidden
++#line 11
++ testRunner.Then("return a list of products", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
++#line hidden
++            }
++            this.ScenarioCleanup();
++        }
++        
++        [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
++        [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
++        public class FixtureData : System.IDisposable
++        {
++            
++            public FixtureData()
++            {
++                GetProductsFeature.FeatureSetup();
++            }
++            
++            void System.IDisposable.Dispose()
++            {
++                GetProductsFeature.FeatureTearDown();
++            }
++        }
++    }
++}
++#pragma warning restore
++#endregion
+diff --git a/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/InsertProduct.feature b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/InsertProduct.feature
+new file mode 100644
+index 0000000..71cf3a7
+--- /dev/null
++++ b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/InsertProduct.feature
+@@ -0,0 +1,20 @@
++﻿Feature: InsertProduct
++
++Narrativa:
++Como empleado de una farmacia y logeado al sistemo
++Quiero agregar un producto a mi farmacia
++Para que quede disponible para la venta
++
++@mytag
++Scenario: Insert new product correctly
++	Given the name <name> of the product
++	And the description <description> of the product
++	And the code <code> of the product
++	And the price <price> of the product
++	When a user wants to add it to the system
++	Then add the product to the user´s pharmacy and return the  product model
++
++Examples: 
++	| description        | name     | code  | price |
++	| new shaker         | product1 | 59595 | 200   |
++	| new excercise ball | product2 | 45612 | 300   |
+diff --git a/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/InsertProduct.feature.cs b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/InsertProduct.feature.cs
+new file mode 100644
+index 0000000..6a347d1
+--- /dev/null
++++ b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/InsertProduct.feature.cs
+@@ -0,0 +1,165 @@
++﻿// ------------------------------------------------------------------------------
++//  <auto-generated>
++//      This code was generated by SpecFlow (https://www.specflow.org/).
++//      SpecFlow Version:3.9.0.0
++//      SpecFlow Generator Version:3.9.0.0
++// 
++//      Changes to this file may cause incorrect behavior and will be lost if
++//      the code is regenerated.
++//  </auto-generated>
++// ------------------------------------------------------------------------------
++#region Designer generated code
++#pragma warning disable
++namespace SpecFlowPharmaGo.WebApi.Features
++{
++    using TechTalk.SpecFlow;
++    using System;
++    using System.Linq;
++    
++    
++    [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
++    [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
++    public partial class InsertProductFeature : object, Xunit.IClassFixture<InsertProductFeature.FixtureData>, System.IDisposable
++    {
++        
++        private static TechTalk.SpecFlow.ITestRunner testRunner;
++        
++        private string[] _featureTags = ((string[])(null));
++        
++        private Xunit.Abstractions.ITestOutputHelper _testOutputHelper;
++        
++#line 1 "InsertProduct.feature"
++#line hidden
++        
++        public InsertProductFeature(InsertProductFeature.FixtureData fixtureData, SpecFlowPharmaGo_WebApi_XUnitAssemblyFixture assemblyFixture, Xunit.Abstractions.ITestOutputHelper testOutputHelper)
++        {
++            this._testOutputHelper = testOutputHelper;
++            this.TestInitialize();
++        }
++        
++        public static void FeatureSetup()
++        {
++            testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
++            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "InsertProduct", "Narrativa:\r\nComo empleado de una farmacia y logeado al sistemo\r\nQuiero agregar un" +
++                    " producto a mi farmacia\r\nPara que quede disponible para la venta", ProgrammingLanguage.CSharp, ((string[])(null)));
++            testRunner.OnFeatureStart(featureInfo);
++        }
++        
++        public static void FeatureTearDown()
++        {
++            testRunner.OnFeatureEnd();
++            testRunner = null;
++        }
++        
++        public virtual void TestInitialize()
++        {
++        }
++        
++        public virtual void TestTearDown()
++        {
++            testRunner.OnScenarioEnd();
++        }
++        
++        public virtual void ScenarioInitialize(TechTalk.SpecFlow.ScenarioInfo scenarioInfo)
++        {
++            testRunner.OnScenarioInitialize(scenarioInfo);
++            testRunner.ScenarioContext.ScenarioContainer.RegisterInstanceAs<Xunit.Abstractions.ITestOutputHelper>(_testOutputHelper);
++        }
++        
++        public virtual void ScenarioStart()
++        {
++            testRunner.OnScenarioStart();
++        }
++        
++        public virtual void ScenarioCleanup()
++        {
++            testRunner.CollectScenarioErrors();
++        }
++        
++        void System.IDisposable.Dispose()
++        {
++            this.TestTearDown();
++        }
++        
++        [Xunit.SkippableTheoryAttribute(DisplayName="Insert new product correctly")]
++        [Xunit.TraitAttribute("FeatureTitle", "InsertProduct")]
++        [Xunit.TraitAttribute("Description", "Insert new product correctly")]
++        [Xunit.TraitAttribute("Category", "mytag")]
++        [Xunit.InlineDataAttribute("new shaker", "product1", "59595", "200", new string[0])]
++        [Xunit.InlineDataAttribute("new excercise ball", "product2", "45612", "300", new string[0])]
++        public virtual void InsertNewProductCorrectly(string description, string name, string code, string price, string[] exampleTags)
++        {
++            string[] @__tags = new string[] {
++                    "mytag"};
++            if ((exampleTags != null))
++            {
++                @__tags = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Concat(@__tags, exampleTags));
++            }
++            string[] tagsOfScenario = @__tags;
++            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
++            argumentsOfScenario.Add("description", description);
++            argumentsOfScenario.Add("name", name);
++            argumentsOfScenario.Add("code", code);
++            argumentsOfScenario.Add("price", price);
++            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Insert new product correctly", null, tagsOfScenario, argumentsOfScenario, this._featureTags);
++#line 9
++this.ScenarioInitialize(scenarioInfo);
++#line hidden
++            bool isScenarioIgnored = default(bool);
++            bool isFeatureIgnored = default(bool);
++            if ((tagsOfScenario != null))
++            {
++                isScenarioIgnored = tagsOfScenario.Where(__entry => __entry != null).Where(__entry => String.Equals(__entry, "ignore", StringComparison.CurrentCultureIgnoreCase)).Any();
++            }
++            if ((this._featureTags != null))
++            {
++                isFeatureIgnored = this._featureTags.Where(__entry => __entry != null).Where(__entry => String.Equals(__entry, "ignore", StringComparison.CurrentCultureIgnoreCase)).Any();
++            }
++            if ((isScenarioIgnored || isFeatureIgnored))
++            {
++                testRunner.SkipScenario();
++            }
++            else
++            {
++                this.ScenarioStart();
++#line 10
++ testRunner.Given(string.Format("the name {0} of the product", name), ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
++#line hidden
++#line 11
++ testRunner.And(string.Format("the description {0} of the product", description), ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
++#line hidden
++#line 12
++ testRunner.And(string.Format("the code {0} of the product", code), ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
++#line hidden
++#line 13
++ testRunner.And(string.Format("the price {0} of the product", price), ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
++#line hidden
++#line 14
++ testRunner.When("a user wants to add it to the system", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
++#line hidden
++#line 15
++ testRunner.Then("add the product to the user´s pharmacy and return the  product model", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
++#line hidden
++            }
++            this.ScenarioCleanup();
++        }
++        
++        [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
++        [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
++        public class FixtureData : System.IDisposable
++        {
++            
++            public FixtureData()
++            {
++                InsertProductFeature.FeatureSetup();
++            }
++            
++            void System.IDisposable.Dispose()
++            {
++                InsertProductFeature.FeatureTearDown();
++            }
++        }
++    }
++}
++#pragma warning restore
++#endregion
+diff --git a/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/UpdateProduct.feature b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/UpdateProduct.feature
+new file mode 100644
+index 0000000..ea92b97
+--- /dev/null
++++ b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/UpdateProduct.feature
+@@ -0,0 +1,19 @@
++﻿Feature: UpdateProducts
++
++Narrativa:
++Como usuario empleado
++Quiero modificar el nombre, descripcion y/o precio
++Para mantener los productos actualizados
++
++@mytag
++Scenario: Update product attribute
++	Given The id <id> of the product
++	And The "<attribute>" with "<value>" of the product
++	When try to update the product
++	Then return the updated product
++
++Examples: 
++	| id | attribute   | value |
++	| 1  | Name        | name1 |
++	| 1  | Description | desc1 |
++	| 1  | Price       | 2.2   |
+\ No newline at end of file
+diff --git a/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/UpdateProduct.feature.cs b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/UpdateProduct.feature.cs
+new file mode 100644
+index 0000000..5d43708
+--- /dev/null
++++ b/Codigo/Backend/SpecFlowPharmaGo.WebApi/Features/UpdateProduct.feature.cs
+@@ -0,0 +1,159 @@
++﻿// ------------------------------------------------------------------------------
++//  <auto-generated>
++//      This code was generated by SpecFlow (https://www.specflow.org/).
++//      SpecFlow Version:3.9.0.0
++//      SpecFlow Generator Version:3.9.0.0
++// 
++//      Changes to this file may cause incorrect behavior and will be lost if
++//      the code is regenerated.
++//  </auto-generated>
++// ------------------------------------------------------------------------------
++#region Designer generated code
++#pragma warning disable
++namespace SpecFlowPharmaGo.WebApi.Features
++{
++    using TechTalk.SpecFlow;
++    using System;
++    using System.Linq;
++    
++    
++    [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
++    [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
++    public partial class UpdateProductsFeature : object, Xunit.IClassFixture<UpdateProductsFeature.FixtureData>, System.IDisposable
++    {
++        
++        private static TechTalk.SpecFlow.ITestRunner testRunner;
++        
++        private string[] _featureTags = ((string[])(null));
++        
++        private Xunit.Abstractions.ITestOutputHelper _testOutputHelper;
++        
++#line 1 "UpdateProduct.feature"
++#line hidden
++        
++        public UpdateProductsFeature(UpdateProductsFeature.FixtureData fixtureData, SpecFlowPharmaGo_WebApi_XUnitAssemblyFixture assemblyFixture, Xunit.Abstractions.ITestOutputHelper testOutputHelper)
++        {
++            this._testOutputHelper = testOutputHelper;
++            this.TestInitialize();
++        }
++        
++        public static void FeatureSetup()
++        {
++            testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
++            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "UpdateProducts", "Narrativa:\r\nComo usuario empleado\r\nQuiero modificar el nombre, descripcion y/o pr" +
++                    "ecio\r\nPara mantener los productos actualizados", ProgrammingLanguage.CSharp, ((string[])(null)));
++            testRunner.OnFeatureStart(featureInfo);
++        }
++        
++        public static void FeatureTearDown()
++        {
++            testRunner.OnFeatureEnd();
++            testRunner = null;
++        }
++        
++        public virtual void TestInitialize()
++        {
++        }
++        
++        public virtual void TestTearDown()
++        {
++            testRunner.OnScenarioEnd();
++        }
++        
++        public virtual void ScenarioInitialize(TechTalk.SpecFlow.ScenarioInfo scenarioInfo)
++        {
++            testRunner.OnScenarioInitialize(scenarioInfo);
++            testRunner.ScenarioContext.ScenarioContainer.RegisterInstanceAs<Xunit.Abstractions.ITestOutputHelper>(_testOutputHelper);
++        }
++        
++        public virtual void ScenarioStart()
++        {
++            testRunner.OnScenarioStart();
++        }
++        
++        public virtual void ScenarioCleanup()
++        {
++            testRunner.CollectScenarioErrors();
++        }
++        
++        void System.IDisposable.Dispose()
++        {
++            this.TestTearDown();
++        }
++        
++        [Xunit.SkippableTheoryAttribute(DisplayName="Update product attribute")]
++        [Xunit.TraitAttribute("FeatureTitle", "UpdateProducts")]
++        [Xunit.TraitAttribute("Description", "Update product attribute")]
++        [Xunit.TraitAttribute("Category", "mytag")]
++        [Xunit.InlineDataAttribute("1", "Name", "name1", new string[0])]
++        [Xunit.InlineDataAttribute("1", "Description", "desc1", new string[0])]
++        [Xunit.InlineDataAttribute("1", "Price", "2.2", new string[0])]
++        public virtual void UpdateProductAttribute(string id, string attribute, string value, string[] exampleTags)
++        {
++            string[] @__tags = new string[] {
++                    "mytag"};
++            if ((exampleTags != null))
++            {
++                @__tags = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Concat(@__tags, exampleTags));
++            }
++            string[] tagsOfScenario = @__tags;
++            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
++            argumentsOfScenario.Add("id", id);
++            argumentsOfScenario.Add("attribute", attribute);
++            argumentsOfScenario.Add("value", value);
++            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Update product attribute", null, tagsOfScenario, argumentsOfScenario, this._featureTags);
++#line 9
++this.ScenarioInitialize(scenarioInfo);
++#line hidden
++            bool isScenarioIgnored = default(bool);
++            bool isFeatureIgnored = default(bool);
++            if ((tagsOfScenario != null))
++            {
++                isScenarioIgnored = tagsOfScenario.Where(__entry => __entry != null).Where(__entry => String.Equals(__entry, "ignore", StringComparison.CurrentCultureIgnoreCase)).Any();
++            }
++            if ((this._featureTags != null))
++            {
++                isFeatureIgnored = this._featureTags.Where(__entry => __entry != null).Where(__entry => String.Equals(__entry, "ignore", StringComparison.CurrentCultureIgnoreCase)).Any();
++            }
++            if ((isScenarioIgnored || isFeatureIgnored))
++            {
++                testRunner.SkipScenario();
++            }
++            else
++            {
++                this.ScenarioStart();
++#line 10
++ testRunner.Given(string.Format("The id {0} of the product", id), ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
++#line hidden
++#line 11
++ testRunner.And(string.Format("The \"{0}\" with \"{1}\" of the product", attribute, value), ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
++#line hidden
++#line 12
++ testRunner.When("try to update the product", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
++#line hidden
++#line 13
++ testRunner.Then("return the updated product", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
++#line hidden
++            }
++            this.ScenarioCleanup();
++        }
++        
++        [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
++        [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
++        public class FixtureData : System.IDisposable
++        {
++            
++            public FixtureData()
++            {
++                UpdateProductsFeature.FeatureSetup();
++            }
++            
++            void System.IDisposable.Dispose()
++            {
++                UpdateProductsFeature.FeatureTearDown();
++            }
++        }
++    }
++}
++#pragma warning restore
++#endregion
+diff --git a/Codigo/Backend/SpecFlowPharmaGo.WebApi/ImplicitUsings.cs b/Codigo/Backend/SpecFlowPharmaGo.WebApi/ImplicitUsings.cs
+new file mode 100644
+index 0000000..d49c638
+--- /dev/null
++++ b/Codigo/Backend/SpecFlowPharmaGo.WebApi/ImplicitUsings.cs
+@@ -0,0 +1,3 @@
++﻿global using FluentAssertions;
++global using TechTalk.SpecFlow;
++global using Xunit;
+diff --git a/Codigo/Backend/SpecFlowPharmaGo.WebApi/SpecFlowPharmaGo.WebApi.csproj b/Codigo/Backend/SpecFlowPharmaGo.WebApi/SpecFlowPharmaGo.WebApi.csproj
+new file mode 100644
+index 0000000..8d59c06
+--- /dev/null
++++ b/Codigo/Backend/SpecFlowPharmaGo.WebApi/SpecFlowPharmaGo.WebApi.csproj
+@@ -0,0 +1,42 @@
++﻿<Project Sdk="Microsoft.NET.Sdk">
++
++  <PropertyGroup>
++    <TargetFramework>net6.0</TargetFramework>
++    <Nullable>enable</Nullable>
++    <ImplicitUsings>enable</ImplicitUsings>
++  </PropertyGroup>
++
++  <ItemGroup>
++    <SpecFlowObsoleteCodeBehindFiles Remove="Features\GetProducts.feature.cs" />
++  </ItemGroup>
++
++  <ItemGroup>
++    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" />
++    <PackageReference Include="SpecFlow.Plus.LivingDocPlugin" Version="3.9.57" />
++    <PackageReference Include="SpecFlow.xUnit" Version="3.9.40" />
++    <PackageReference Include="xunit" Version="2.4.1" />
++    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.3" />
++    <PackageReference Include="FluentAssertions" Version="6.2.0" />
++  </ItemGroup>
++
++  <ItemGroup>
++    <Folder Include="Drivers\" />
++    <Folder Include="Support\" />
++  </ItemGroup>
++
++  <ItemGroup>
++    <ProjectReference Include="..\PharmaGo.WebApi\PharmaGo.WebApi.csproj" />
++  </ItemGroup>
++
++  <ItemGroup>
++    <Compile Update="Features\InsertProduct.feature.cs">
++      <DependentUpon>InsertProduct.feature</DependentUpon>
++    </Compile>
++    <Compile Update="Features\UpdateProduct.feature.cs">
++      <DependentUpon>UpdateProduct.feature</DependentUpon>
++    </Compile>
++  </ItemGroup>
++
++ 
++
++</Project>
+diff --git a/Codigo/Backend/SpecFlowPharmaGo.WebApi/StepDefinitions/DeleteProductStepDefinitions.cs b/Codigo/Backend/SpecFlowPharmaGo.WebApi/StepDefinitions/DeleteProductStepDefinitions.cs
+new file mode 100644
+index 0000000..5064709
+--- /dev/null
++++ b/Codigo/Backend/SpecFlowPharmaGo.WebApi/StepDefinitions/DeleteProductStepDefinitions.cs
+@@ -0,0 +1,53 @@
++using Newtonsoft.Json;
++using PharmaGo.Domain.Entities;
++using System;
++using System.Net;
++using System.Text;
++using TechTalk.SpecFlow;
++
++namespace SpecFlowPharmaGo.WebApi.StepDefinitions
++{
++    [Binding]
++    public class DeleteProductStepDefinitions
++    {
++        private readonly ScenarioContext context;
++
++        public DeleteProductStepDefinitions(ScenarioContext _context)
++        {
++            context = _context;
++        }
++
++        [Given(@"The id 1 of a product")]
++        public void GivenTheIdOfAProduct()
++        {
++            context.Add("ID", "1");
++        }
++
++        [When(@"try to delete the product")]
++        public async Task WhenTryToDeleteTheProduct()
++        {
++            HttpClientHandler clientHandler = new HttpClientHandler();
++            clientHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => { return true; };
++            var client = new HttpClient(clientHandler);
++            client.DefaultRequestHeaders.Add("Authorization", "e9e0e1e9-3812-4eb5-949e-ae92ac931401");
++
++            var request = new HttpRequestMessage(HttpMethod.Delete, $"https://localhost:7186/api/products/{context.Get<string>("ID")}");
++
++            var response = await client.SendAsync(request).ConfigureAwait(false);
++
++            try
++            {
++                context.Set(response.StatusCode, "ResponseStatusCode");
++            }
++            finally
++            {
++            }
++        }
++
++        [Then(@"the product has been successfully  deleted")]
++        public void ThenTheProductHasBeenSuccessfullyDeleted()
++        {
++            Assert.Equal(200, (int)context.Get<HttpStatusCode>("ResponseStatusCode"));
++        }
++    }
++}
+diff --git a/Codigo/Backend/SpecFlowPharmaGo.WebApi/StepDefinitions/GetProductsStepDefinitions.cs b/Codigo/Backend/SpecFlowPharmaGo.WebApi/StepDefinitions/GetProductsStepDefinitions.cs
+new file mode 100644
+index 0000000..85d0599
+--- /dev/null
++++ b/Codigo/Backend/SpecFlowPharmaGo.WebApi/StepDefinitions/GetProductsStepDefinitions.cs
+@@ -0,0 +1,40 @@
++using System.Net;
++
++namespace SpecFlowPharmaGo.WebApi.StepDefinitions
++{
++    [Binding]
++    public sealed class GetProductsStepDefinitions
++    {
++        private readonly ScenarioContext context;
++
++        public GetProductsStepDefinitions(ScenarioContext context)
++        {
++            this.context = context;
++        }
++
++        [When("perform a simple products request")]
++        public async Task WhenIPerformASimpleProductsRequest()
++        {
++            HttpClientHandler clientHandler = new HttpClientHandler();
++            clientHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => { return true; };
++            var client = new HttpClient(clientHandler);
++
++            var request = new HttpRequestMessage(HttpMethod.Get, $"https://localhost:7186/api/products");
++            var response = await client.SendAsync(request).ConfigureAwait(false);
++
++            try
++            {
++                context.Set(response.StatusCode, "ResponseStatusCode");
++            }
++            finally
++            {
++            }
++        }
++
++        [Then("return a list of products")]
++        public void ThenReturnAListOfProducts()
++        {
++            Assert.Equal(200, (int)context.Get<HttpStatusCode>("ResponseStatusCode"));
++        }
++    }
++}
+diff --git a/Codigo/Backend/SpecFlowPharmaGo.WebApi/StepDefinitions/InsertProductStepDefinitions.cs b/Codigo/Backend/SpecFlowPharmaGo.WebApi/StepDefinitions/InsertProductStepDefinitions.cs
+new file mode 100644
+index 0000000..ec8dac6
+--- /dev/null
++++ b/Codigo/Backend/SpecFlowPharmaGo.WebApi/StepDefinitions/InsertProductStepDefinitions.cs
+@@ -0,0 +1,84 @@
++using Newtonsoft.Json;
++using PharmaGo.DataAccess.Repositories;
++using PharmaGo.Domain.Entities;
++using PharmaGo.WebApi.Models.In;
++using System;
++using System.Net;
++using System.Text;
++using TechTalk.SpecFlow;
++
++namespace SpecFlowPharmaGo.WebApi.StepDefinitions
++{
++    [Binding]
++    public class InsertProductStepDefinitions
++    {
++
++        private readonly ScenarioContext context;
++        private readonly Product _product = new Product();
++        private readonly ProductModel _productModel = new ProductModel();
++        public InsertProductStepDefinitions(ScenarioContext context)
++        {
++            this.context = context;
++        }
++
++        [Given(@"the name product(.*) of the product")]
++        public void GivenTheNameProductOfTheProduct(string name)
++        {
++            _product.Name = name;
++            _productModel.Name = name;
++        }
++
++        [Given(@"the description(.*) of the product")]
++        public void GivenTheDescriptionNewExcerciseBallOfTheProduct(string description)
++        {
++            _product.Description = description;
++            _productModel.Description = description;
++        }
++
++
++        [Given(@"the code (.*) of the product")]
++        public void GivenTheCodeOfTheProduct(int code)
++        {
++            _product.Code = code;
++            _productModel.Code = code;
++        }
++
++        [Given(@"the price (.*) of the product")]
++        public void GivenThePriceOfTheProduct(decimal price)
++        {
++            _product.Price = price;
++            _productModel.Price = price;
++        }
++
++        [When(@"a user wants to add it to the system")]
++        public async Task WhenAUserWantsToAddItToTheSystemAsync()
++        {
++            HttpClientHandler clientHandler = new HttpClientHandler();
++            clientHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => { return true; };
++            var client = new HttpClient(clientHandler);
++            client.DefaultRequestHeaders.Add("Authorization", "e9e0e1e9-3812-4eb5-949e-ae92ac931401");
++
++            string requestBody = JsonConvert.SerializeObject(_productModel);
++
++            var request = new HttpRequestMessage(HttpMethod.Post, $"https://localhost:7186/api/products");
++
++            request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
++
++            var response = await client.SendAsync(request).ConfigureAwait(false);
++
++            try
++            {
++                context.Set(response.StatusCode, "ResponseStatusCode");
++            }
++            finally
++            {
++            }
++        }
++
++        [Then(@"add the product to the user´s pharmacy and return the  product model")]
++        public void ThenAddTheProductToTheUserSPharmacyAndReturnTheProductModel()
++        {
++            Assert.Equal(200, (int)context.Get<HttpStatusCode>("ResponseStatusCode"));
++        }
++    }
++}
+diff --git a/Codigo/Backend/SpecFlowPharmaGo.WebApi/StepDefinitions/UpdateProductsStepDefinitions.cs b/Codigo/Backend/SpecFlowPharmaGo.WebApi/StepDefinitions/UpdateProductsStepDefinitions.cs
+new file mode 100644
+index 0000000..c770cd9
+--- /dev/null
++++ b/Codigo/Backend/SpecFlowPharmaGo.WebApi/StepDefinitions/UpdateProductsStepDefinitions.cs
+@@ -0,0 +1,69 @@
++using Newtonsoft.Json;
++using PharmaGo.Domain.Entities;
++using System.Net;
++using System.Text;
++
++namespace SpecFlowPharmaGo.WebApi.StepDefinitions
++{
++    [Binding]
++    public class UpdateProductsStepDefinitions
++    {
++        private readonly ScenarioContext context;
++        private readonly Product _product = new Product();
++
++        public UpdateProductsStepDefinitions(ScenarioContext context)
++        {
++            this.context = context;
++        }
++
++        [Given(@"The id (.*) of the product")]
++        public void GivenTheIdOfTheProduct(string id)
++        {
++            context.Add("ID", id);
++        }
++
++        [Given(@"The ""([^""]*)"" with ""([^""]*)"" of the product")]
++        public void GivenTheWithValueOfTheProduct(string name, dynamic val)
++        {
++            decimal dec = 0;
++            if (Decimal.TryParse(val, out dec))
++            {
++                typeof(Product).GetProperty(name).SetValue(_product, dec);
++            } else
++            {
++                typeof(Product).GetProperty(name).SetValue(_product, val);
++            }
++        }
++
++        [When(@"try to update the product")]
++        public async Task WhenTryToUpdateAProductName()
++        {
++            HttpClientHandler clientHandler = new HttpClientHandler();
++            clientHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => { return true; };
++            var client = new HttpClient(clientHandler);
++            client.DefaultRequestHeaders.Add("Authorization", "e9e0e1e9-3812-4eb5-949e-ae92ac931401");
++
++            string requestBody = JsonConvert.SerializeObject(new { Name = _product.Name, Description = _product.Description, Price = _product.Price });
++
++            var request = new HttpRequestMessage(HttpMethod.Put, $"https://localhost:7186/api/products/{context.Get<string>("ID")}");
++
++            request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
++
++            var response = await client.SendAsync(request).ConfigureAwait(false);
++
++            try
++            {
++                context.Set(response.StatusCode, "ResponseStatusCode");
++            }
++            finally
++            {
++            }
++        }
++
++        [Then(@"return the updated product")]
++        public void ThenReturnTheUpdatedProduct()
++        {
++            Assert.Equal(200, (int)context.Get<HttpStatusCode>("ResponseStatusCode"));
++        }
++    }
++}
+diff --git a/Codigo/Frontend/src/app/app-routing.module.ts b/Codigo/Frontend/src/app/app-routing.module.ts
+index d700fe7..11a6217 100644
+--- a/Codigo/Frontend/src/app/app-routing.module.ts
++++ b/Codigo/Frontend/src/app/app-routing.module.ts
+@@ -28,6 +28,11 @@ import { PurchaseByDateComponent } from './pages/owner/purchase-by-date/purchase
+ import { InvitationComponent } from './pages/owner/invitation/invitation.component';
+ import { CreatePharmacyComponent } from './pages/admin/create-pharmacy/create-pharmacy.component';
+ import { StockRequestOwnerComponent } from './pages/owner/stock-request-owner/stock-request-owner.component';
++import { ProductDetailComponent } from './pages/home/productDetail/productDetail.component';
++import { CreateProductComponent } from './pages/employee/create-product/create-product.component';
++import { DeleteProductComponent } from './pages/employee/delete-product/delete-product.component';
++import { UpdateProductComponent } from './pages/employee/update-product/update-product.component';
++import { ListProductComponent } from './pages/employee/list-product/list-product.component';
+ 
+ const routes: Routes = [
+   { path: '', redirectTo: '/home', pathMatch: 'full' },
+@@ -35,6 +40,7 @@ const routes: Routes = [
+   { path: 'home/cart', component: CartComponent },
+   { path: 'home/cart/cho', component: ChoComponent },
+   { path: 'home/detail/:id', component: DetailComponent },
++  { path: 'home/productDetail/:id', component: ProductDetailComponent },
+   { path: 'home/tracking', component: TrackingComponent },
+   { path: 'login', component: LoginComponent },
+   { path: 'register', component: RegisterComponent },
+@@ -42,6 +48,10 @@ const routes: Routes = [
+   { path: 'employee/purchase-status', component: PurchaseStatusComponent, canActivate: [AuthenticationGuard], data: {roles: ['Employee'] } },
+   { path: 'employee/delete-drug', component: DeleteDrugComponent, canActivate: [AuthenticationGuard], data: {roles: ['Employee'] } },
+   { path: 'employee/create-drug', component: CreateDrugComponent, canActivate: [AuthenticationGuard], data: {roles: ['Employee'] } },
++  { path: 'employee/create-product', component: CreateProductComponent, canActivate: [AuthenticationGuard], data: {roles: ['Employee'] } },
++  { path: 'employee/delete-product', component: DeleteProductComponent, canActivate: [AuthenticationGuard], data: {roles: ['Employee'] } },
++  { path: 'employee/update-product', component: UpdateProductComponent, canActivate: [AuthenticationGuard], data: {roles: ['Employee'] } },
++  { path: 'employee/list-product', component: ListProductComponent, canActivate: [AuthenticationGuard], data: {roles: ['Employee'] } },
+   { path: 'employee/stock-request', component: StockRequestComponent, canActivate: [AuthenticationGuard], data: {roles: ['Employee'] } },
+   { path: 'employee/create-request', component: CreateRequestComponent, canActivate: [AuthenticationGuard], data: {roles: ['Employee'] } },
+   { path: 'employee/export-drugs', component: ExportDrugsComponent, canActivate: [AuthenticationGuard], data: {roles: ['Employee'] } },
+diff --git a/Codigo/Frontend/src/app/app.module.ts b/Codigo/Frontend/src/app/app.module.ts
+index 2ee60c5..0c2d8be 100644
+--- a/Codigo/Frontend/src/app/app.module.ts
++++ b/Codigo/Frontend/src/app/app.module.ts
+@@ -40,6 +40,7 @@ import { ChoComponent } from './pages/home/cho/cho.component';
+ 
+ 
+ import { DetailComponent } from './pages/home/detail/detail.component';
++import { ProductDetailComponent } from './pages/home/productDetail/productDetail.component';
+ import { TrackingComponent } from './pages/home/tracking/tracking.component';
+ import { Page404Component } from './pages/home/page404/page404.component';
+ 
+@@ -54,7 +55,10 @@ import { CreatePharmacyComponent } from './pages/admin/create-pharmacy/create-ph
+ import { EmployeeComponent } from './pages/employee/employee/employee.component';
+ import { PurchaseStatusComponent } from './pages/employee/purchase-status/purchase-status.component';
+ import { CreateDrugComponent } from './pages/employee/create-drug/create-drug.component';
++import { CreateProductComponent } from './pages/employee/create-product/create-product.component';
+ import { DeleteDrugComponent } from './pages/employee/delete-drug/delete-drug.component';
++import { DeleteProductComponent } from './pages/employee/delete-product/delete-product.component';
++import { UpdateProductComponent } from './pages/employee/update-product/update-product.component';
+ import { ExportDrugsComponent } from './pages/employee/export-drugs/export-drugs.component';
+ 
+ // Login & Register
+@@ -77,6 +81,7 @@ import { PurchaseByDateComponent } from './pages/owner/purchase-by-date/purchase
+ // Owner
+ import { InvitationComponent } from './pages/owner/invitation/invitation.component';
+ import { StockRequestOwnerComponent } from './pages/owner/stock-request-owner/stock-request-owner.component';
++import { ListProductComponent } from './pages/employee/list-product/list-product.component';
+ 
+ @NgModule({
+   declarations: [
+@@ -86,6 +91,7 @@ import { StockRequestOwnerComponent } from './pages/owner/stock-request-owner/st
+     CartComponent,
+     ChoComponent,
+     DetailComponent,
++    ProductDetailComponent,
+     TrackingComponent,
+     // Custom components
+     CustomFooterComponent,
+@@ -107,7 +113,11 @@ import { StockRequestOwnerComponent } from './pages/owner/stock-request-owner/st
+     EmployeeComponent,
+     PurchaseStatusComponent,
+     CreateDrugComponent,
++    CreateProductComponent,
+     DeleteDrugComponent,
++    DeleteProductComponent,
++    UpdateProductComponent,
++    ListProductComponent,
+     StockRequestComponent,
+     CreateRequestComponent,
+     ExportDrugsComponent,
+diff --git a/Codigo/Frontend/src/app/interfaces/product.ts b/Codigo/Frontend/src/app/interfaces/product.ts
+new file mode 100644
+index 0000000..9bef0d2
+--- /dev/null
++++ b/Codigo/Frontend/src/app/interfaces/product.ts
+@@ -0,0 +1,43 @@
++export interface Product {
++    id: number;
++    code: number;
++    name: string;
++    description: string;
++    price: number;
++    pharmacy: {
++      id: number;
++      name: string;  
++    };
++    stock: number;
++    quantity: number;
++}
++
++export class ProductRequest {
++  code: number;
++  name: string;
++  description: string;
++  stock: number;
++  price: number;
++  pharmacyName: string = "";
++
++  constructor(code: number, name: string, description: string, stock: number, price: number, pharmacyName: string){
++    this.code = code;
++    this.name = name;
++    this.description = description;
++    this.stock = stock;
++    this.price = price;
++    this.pharmacyName = pharmacyName;
++  }
++}
++
++export class UpdateProductRequest {
++  name: string;
++  description: string;
++  price: number;
++
++  constructor(name: string, description: string, price: number){
++    this.name = name;
++    this.description = description;
++    this.price = price;
++  }
++}
+\ No newline at end of file
+diff --git a/Codigo/Frontend/src/app/interfaces/purchase.ts b/Codigo/Frontend/src/app/interfaces/purchase.ts
+index 879d118..4831a1f 100644
+--- a/Codigo/Frontend/src/app/interfaces/purchase.ts
++++ b/Codigo/Frontend/src/app/interfaces/purchase.ts
+@@ -16,13 +16,16 @@ export class PurchaseRequestDetail {
+   code: string = "";
+   quantity: number = 1;
+   pharmacyId: number = 1;
++  productCode: number = 0;
+ 
+   constructor(code: string, 
+                         quantity: number, 
+-                        pharmacyId: number){
++                        pharmacyId: number,
++                        productCode: number){
+       this.code = code;
+       this.quantity = quantity;
+       this.pharmacyId = pharmacyId;
++      this.productCode = productCode;
+   }
+ }
+ 
+diff --git a/Codigo/Frontend/src/app/pages/employee/create-product/create-product.component.css b/Codigo/Frontend/src/app/pages/employee/create-product/create-product.component.css
+new file mode 100644
+index 0000000..5d81556
+--- /dev/null
++++ b/Codigo/Frontend/src/app/pages/employee/create-product/create-product.component.css
+@@ -0,0 +1,3 @@
++.customAlign{
++    text-align: center;
++}
+\ No newline at end of file
+diff --git a/Codigo/Frontend/src/app/pages/employee/create-product/create-product.component.html b/Codigo/Frontend/src/app/pages/employee/create-product/create-product.component.html
+new file mode 100644
+index 0000000..c3e1c1c
+--- /dev/null
++++ b/Codigo/Frontend/src/app/pages/employee/create-product/create-product.component.html
+@@ -0,0 +1,83 @@
++<app-user-header title="Employee" link="employee"></app-user-header>
++<div class="bg-light min-vh-100 d-flex flex-row align-items-center">
++  <c-container>
++    <c-row class="justify-content-center mt-3 mb-3">
++      <c-col lg="7" md="9" xl="6">
++        <c-card class="mx-4">
++          <c-card-body class="p-4">
++            <form cForm [formGroup]="form" class="customAlign">
++              <h3>Create Product</h3>
++              <c-input-group class="mb-3">
++                <span cInputGroupText>
++                  <svg cIcon [cIcon]="icons.cilBarcode"></svg>
++                </span>
++                <input
++                  cFormControl
++                  type="number"
++                  placeholder="Code"
++                  value="1" 
++                  min="1" 
++                  formControlName="code"
++                />
++              </c-input-group>
++              <c-input-group class="mb-3">
++                <span cInputGroupText>
++                  <svg cIcon [cIcon]="icons.cilPencil"></svg>
++                </span>
++                <input
++                  formControlName="name" 
++                  autoComplete="name" 
++                  cFormControl 
++                  placeholder="Name" />
++              </c-input-group>
++              <c-input-group class="mb-3">
++                <span cInputGroupText>
++                  <svg cIcon [cIcon]="icons.cilAlignCenter"></svg>
++                </span>
++                <input 
++                  formControlName="description"
++                  autoComplete="description" 
++                  cFormControl 
++                  placeholder="Description" />
++              </c-input-group>
++              <c-input-group class="mb-3">
++                <span cInputGroupText>
++                  <svg cIcon [cIcon]="icons.cilLoop1"></svg>
++                </span>
++                <input
++                  cFormControl
++                  type="number"
++                  placeholder="Stock"
++                  value="1" 
++                  min="1" 
++                  formControlName="stock"
++                />
++              </c-input-group>
++              <c-input-group class="mb-3">
++                <span cInputGroupText>
++                  <svg cIcon [cIcon]="icons.cilDollar"></svg>
++                </span>
++                <input
++                  autoComplete="price"
++                  cFormControl
++                  placeholder="Price"
++                  type="input"
++                  formControlName="price"
++                />
++              </c-input-group>
++              <div class="d-grid">
++                <button 
++                (click)="createProduct()"
++                class="customButton" 
++                cButton 
++                color="primary">
++                  Create Product
++                </button>
++              </div>
++            </form>
++          </c-card-body>
++        </c-card>
++      </c-col>
++    </c-row>
++  </c-container>
++</div>
+\ No newline at end of file
+diff --git a/Codigo/Frontend/src/app/pages/employee/create-product/create-product.component.ts b/Codigo/Frontend/src/app/pages/employee/create-product/create-product.component.ts
+new file mode 100644
+index 0000000..0fb2e2e
+--- /dev/null
++++ b/Codigo/Frontend/src/app/pages/employee/create-product/create-product.component.ts
+@@ -0,0 +1,78 @@
++import { Component, OnInit } from '@angular/core';
++import { cilBarcode, cilPencil, cilPaint, cilAlignCenter, cilDollar, cilLibrary, cilLoop1, cilTask, cilShortText } from '@coreui/icons';
++import { AbstractControl, FormBuilder, FormControl, FormGroup } from '@angular/forms';
++import { Pharmacy } from '../../../interfaces/pharmacy';
++import { CommonService } from '../../../services/CommonService';
++import { ProductService } from 'src/app/services/product.service';
++import { ProductRequest } from 'src/app/interfaces/product';
++
++@Component({
++  selector: 'app-create-product',
++  templateUrl: './create-product.component.html',
++  styleUrls: ['./create-product.component.css'],
++})
++export class CreateProductComponent implements OnInit {
++  form: FormGroup | any;
++  pharmacys: Pharmacy[] = [];
++
++  icons = { cilBarcode, cilPencil, cilAlignCenter, cilLibrary,
++    cilDollar, cilLoop1, cilTask, cilShortText, cilPaint };
++
++  constructor(
++    private commonService: CommonService,
++    private productService: ProductService,
++    private fb: FormBuilder
++  ) {
++    
++    this.form = this.fb.group({
++        name: new FormControl(),
++        code: new FormControl(),
++        description: new FormControl(),
++        price: new FormControl(),
++        stock: 10,
++      });
++  }
++
++  ngOnInit(){}
++
++  get name(): AbstractControl {
++    return this.form.controls.name;
++  }
++
++  get code(): AbstractControl {
++    return this.form.controls.code;
++  }
++
++  get description(): AbstractControl {
++    return this.form.controls.description;
++  }
++
++  get stock(): AbstractControl {
++    return this.form.controls.stock;
++  }
++  
++  get price(): AbstractControl {
++    return this.form.controls.price;
++  }
++
++  createProduct(): void {
++    let name = this.name.value ? this.name.value : "";
++    let code = this.code.value ? this.code.value : 0;
++    let description = this.description.value ? this.description.value : "";
++    let stock = this.stock.value ? this.stock.value : 0;
++    let price = this.price.value ? this.price.value : 0;
++
++    let productRequest = new ProductRequest(code, name, description, stock, price, "");
++        this.productService.createDrug(productRequest).subscribe((product) => {
++        this.form.reset();
++
++        if (product){
++          this.commonService.updateToastData(
++            `Success creating "${product.code} - ${product.name}"`,
++            'success',
++            'Product created.'
++          );
++        }
++      });
++  }
++}
+diff --git a/Codigo/Frontend/src/app/pages/employee/delete-product/delete-product.component.css b/Codigo/Frontend/src/app/pages/employee/delete-product/delete-product.component.css
+new file mode 100644
+index 0000000..881a3b8
+--- /dev/null
++++ b/Codigo/Frontend/src/app/pages/employee/delete-product/delete-product.component.css
+@@ -0,0 +1,11 @@
++.rejectBackground{
++    background: #bb2d3bed;
++}
++
++.textBackground{
++    color: white;
++}
++
++.customAlign{
++    text-align: center;
++}
+\ No newline at end of file
+diff --git a/Codigo/Frontend/src/app/pages/employee/delete-product/delete-product.component.html b/Codigo/Frontend/src/app/pages/employee/delete-product/delete-product.component.html
+new file mode 100644
+index 0000000..f3a31ed
+--- /dev/null
++++ b/Codigo/Frontend/src/app/pages/employee/delete-product/delete-product.component.html
+@@ -0,0 +1,60 @@
++<app-user-header title="Employee" link="employee"></app-user-header>
++<c-container class="mt-3">
++  <c-row [ngStyle]="{ width: '100%' }">
++    <c-col>
++      <c-row class="g-0 customAlign">
++        <h3>Delete Drug</h3>
++        <table 
++          *ngIf="products.length > 0"
++          cTable
++          hover
++          [responsive]="true">
++          <thead>
++            <tr>
++              <th scope="col">Code</th>
++              <th scope="col">Name</th>
++              <th scope="col">Price</th>
++              <th scope="col">Pharmacy</th>
++              <th scope="col"></th>
++            </tr>
++          </thead>
++          <tbody>
++            <tr *ngFor="let product of products">
++              <td>{{ product.code }}</td>
++              <td>{{ product.name }}</td>
++              <td>{{ product.price | currency }}</td>
++              <td>{{ product.pharmacy.name }}</td>
++              <td>
++                <button
++                  title="Delete"
++                  class="btn btn-outline-danger"
++                  (click)="deleteProduct(product.id)">
++                  <svg cIcon [cIcon]="icons.cilX"></svg>
++                </button>
++              </td>
++            </tr>
++          </tbody>
++        </table>
++      </c-row>
++    </c-col>
++  </c-row>
++</c-container>
++
++<c-modal [visible]="visible">
++  <c-modal-header
++    class="rejectBackground"
++  >
++    <h5 cModalTitle class="textBackground">{{ modalTitle }}</h5>
++    <button (click)="closeModal()" cButtonClose></button>
++  </c-modal-header>
++  <c-modal-body>{{ modalMessage }}</c-modal-body>
++  <c-modal-footer>
++    <button (click)="closeModal()" cButton color="secondary">No</button>
++    <button
++      cButton
++      (click)="saveModal($event)"
++      color="'danger">
++      Yes
++    </button>
++  </c-modal-footer>
++</c-modal>
+diff --git a/Codigo/Frontend/src/app/pages/employee/delete-product/delete-product.component.ts b/Codigo/Frontend/src/app/pages/employee/delete-product/delete-product.component.ts
+new file mode 100644
+index 0000000..95694c2
+--- /dev/null
++++ b/Codigo/Frontend/src/app/pages/employee/delete-product/delete-product.component.ts
+@@ -0,0 +1,64 @@
++import { Component, OnInit } from '@angular/core';
++import { cilCheckAlt, cilX } from '@coreui/icons';
++import { CommonService } from '../../../services/CommonService';
++import { Product } from 'src/app/interfaces/product';
++import { ProductService } from 'src/app/services/product.service';
++
++@Component({
++  selector: 'app-delete-product',
++  templateUrl: './delete-product.component.html',
++  styleUrls: ['./delete-product.component.css'],
++})
++export class DeleteProductComponent implements OnInit {
++  products: Product[] = [];
++  icons = { cilCheckAlt, cilX };
++  targetItem: any = undefined;
++  visible = false;
++  modalTitle = '';
++  modalMessage = '';
++
++  constructor(
++    private commonService: CommonService,
++    private productService: ProductService
++  ) {}
++
++  ngOnInit(): void {
++    this.getProductsByUser();
++  }
++
++  getProductsByUser() {
++    this.productService.getProducts().subscribe(p => this.products = p);
++  }
++
++  deleteProduct(index: number): void {
++    for (let product of this.products) {
++      if (product.id === index) {
++        this.targetItem = product;
++        break;
++      }
++    }
++    if (this.targetItem) {
++      this.modalTitle = 'Delete Drug';
++      this.modalMessage = `Deleting '${this.targetItem.code} - ${this.targetItem.name}'. Are you sure ?`;
++      this.visible = true;
++    }
++  }
++
++  closeModal(): void {
++    this.visible = false;
++  }
++
++  saveModal(event: any): void {
++    if (event) {
++      this.productService.deleteProduct(this.targetItem.id).subscribe(() => {
++        this.visible = false;
++        this.getProductsByUser();
++        this.commonService.updateToastData(
++          `Success deleting drug "${this.targetItem.code} - ${this.targetItem.name}"`,
++          'success',
++          'Drug deleted.'
++        );
++      });
++    }
++  }
++}
+diff --git a/Codigo/Frontend/src/app/pages/employee/employee/employee.component.html b/Codigo/Frontend/src/app/pages/employee/employee/employee.component.html
+index ffe766f..71069a6 100644
+--- a/Codigo/Frontend/src/app/pages/employee/employee/employee.component.html
++++ b/Codigo/Frontend/src/app/pages/employee/employee/employee.component.html
+@@ -113,6 +113,60 @@
+         </div>
+       </div>
+     </div>
++
++    <div class="col-6 col-lg-3">
++      <div class="card">
++        <div class="card-block p-1 clearfix">
++          <i class="fa fa-cogs bg-primary p-1 font-2xl mr-1 float-left"></i>
++          <div class="h5 text-primary mb-0 mt-h">Product</div>
++          <div class="text-muted text-uppercase font-weight-bold font-xs">
++            Create
++          </div>
++        </div>
++        <div class="card-footer p-x-1 py-h customCardIcon">
++          <a class="font-weight-bold font-xs btn-block text-muted" 
++              routerLink="/employee/create-product">
++              <svg cIcon [cIcon]="icons.cilArrowThickRight"></svg>
++          </a>
++        </div>
++      </div>
++    </div>
++    
++    <div class="col-6 col-lg-3">
++      <div class="card">
++        <div class="card-block p-1 clearfix">
++          <i class="fa fa-cogs bg-primary p-1 font-2xl mr-1 float-left"></i>
++          <div class="h5 text-primary mb-0 mt-h">Product</div>
++          <div class="text-muted text-uppercase font-weight-bold font-xs">
++            Delete
++          </div>
++        </div>
++        <div class="card-footer p-x-1 py-h customCardIcon">
++          <a class="font-weight-bold font-xs btn-block text-muted"
++          routerLink="/employee/delete-product">
++          <svg cIcon [cIcon]="icons.cilArrowThickRight"></svg>
++          </a>
++        </div>
++      </div>
++    </div>
++
++    <div class="col-6 col-lg-3">
++      <div class="card">
++        <div class="card-block p-1 clearfix">
++          <i class="fa fa-cogs bg-primary p-1 font-2xl mr-1 float-left"></i>
++          <div class="h5 text-primary mb-0 mt-h">Product</div>
++          <div class="text-muted text-uppercase font-weight-bold font-xs">
++            List
++          </div>
++        </div>
++        <div class="card-footer p-x-1 py-h customCardIcon">
++          <a class="font-weight-bold font-xs btn-block text-muted" 
++              routerLink="/employee/list-product">
++              <svg cIcon [cIcon]="icons.cilArrowThickRight"></svg>
++          </a>
++        </div>
++      </div>
++    </div>
+     <!--/.col-->
+     <!--
+     <div class="col-6 col-lg-3">
+diff --git a/Codigo/Frontend/src/app/pages/employee/list-product/list-product.component.css b/Codigo/Frontend/src/app/pages/employee/list-product/list-product.component.css
+new file mode 100644
+index 0000000..731d884
+--- /dev/null
++++ b/Codigo/Frontend/src/app/pages/employee/list-product/list-product.component.css
+@@ -0,0 +1,3 @@
++.customWidth{
++    display: flex;
++}
+\ No newline at end of file
+diff --git a/Codigo/Frontend/src/app/pages/employee/list-product/list-product.component.html b/Codigo/Frontend/src/app/pages/employee/list-product/list-product.component.html
+new file mode 100644
+index 0000000..22a1f38
+--- /dev/null
++++ b/Codigo/Frontend/src/app/pages/employee/list-product/list-product.component.html
+@@ -0,0 +1,44 @@
++<app-user-header title="Administrator" link="admin"></app-user-header>
++<c-container class="mt-3">
++  <c-row [ngStyle]="{ width: '100%' }">
++    <c-col>
++      <c-card
++        [cBorder]="{ top: { color: 'info', width: 3 } }"
++        class="mb-3">
++        <c-row class="g-0">
++          <table
++          cTable
++          hover
++          [responsive]="true">
++          <thead>
++              <tr>
++                  <th scope="col">Pharmacy</th>
++                  <th scope="col">Name</th>
++                  <th scope="col">Code</th>
++                  <th scope="col">Description</th>
++                  <th scope="col"></th>
++                </tr>
++          </thead>
++          <tbody *ngFor="let product of products">
++              <tr>
++                  <td>{{ product.pharmacy !== null ? product.pharmacy.name : "" }}</td>
++                  <td>{{ product.name }}</td>
++                  <td>{{ product.code }}</td>
++                  <td>{{ product.description }}</td>
++                  <td>
++                    <button
++                      title="Update"
++                      cButton
++                      color="primary"
++                      (click)="update(product.id)">Update
++                      <svg  cIcon [cIcon]="icons.cilSync"></svg>
++                    </button>
++                  </td>
++              </tr>
++          </tbody>
++          </table>
++        </c-row>
++      </c-card>
++    </c-col>
++  </c-row>
++</c-container>
+diff --git a/Codigo/Frontend/src/app/pages/employee/list-product/list-product.component.ts b/Codigo/Frontend/src/app/pages/employee/list-product/list-product.component.ts
+new file mode 100644
+index 0000000..02fa0fd
+--- /dev/null
++++ b/Codigo/Frontend/src/app/pages/employee/list-product/list-product.component.ts
+@@ -0,0 +1,44 @@
++import { Component, Input, OnInit } from "@angular/core";
++import { Invitation } from "src/app/interfaces/invitation";
++import { CommonService } from "src/app/services/CommonService";
++import { InvitationService } from "src/app/services/invitation.service";
++import { cilSync } from '@coreui/icons';
++import { Router } from "@angular/router";
++import { Pharmacy } from "src/app/interfaces/pharmacy";
++import { PharmacyService } from "src/app/services/pharmacy.service";
++import { RoleService } from "src/app/services/role.service";
++import { Role } from "src/app/interfaces/role";
++import { TitleStrategy } from "@angular/router";
++import { Product } from "src/app/interfaces/product";
++import { ProductService } from "src/app/services/product.service";
++
++@Component({
++    selector: 'app-list-product',
++    templateUrl: './list-product.component.html',
++    styleUrls: ['./list-product.component.css'],
++})
++
++export class ListProductComponent implements OnInit {
++    products: Product[] = [];
++
++    icons = { cilSync };
++
++    constructor(
++        private productService: ProductService,
++        private route: Router){}
++
++    ngOnInit(): void {
++        this.getProducts();
++    };
++
++    getProducts(): void {
++        this.productService
++          .getProducts()
++          .subscribe((p) => (this.products = p));
++      }
++    
++    update(id: number): void {
++        this.route.navigate(['employee/update-product', 
++        { id: id }])
++    }
++}
+\ No newline at end of file
+diff --git a/Codigo/Frontend/src/app/pages/employee/update-product/update-product.component.css b/Codigo/Frontend/src/app/pages/employee/update-product/update-product.component.css
+new file mode 100644
+index 0000000..e69de29
+diff --git a/Codigo/Frontend/src/app/pages/employee/update-product/update-product.component.html b/Codigo/Frontend/src/app/pages/employee/update-product/update-product.component.html
+new file mode 100644
+index 0000000..d9b2f90
+--- /dev/null
++++ b/Codigo/Frontend/src/app/pages/employee/update-product/update-product.component.html
+@@ -0,0 +1,56 @@
++<app-user-header title="Administrator" link="admin"></app-user-header>
++<div class="bg-light min-vh-100 d-flex flex-row align-items-center">
++    <c-container>
++      <c-row class="justify-content-center mt-3 mb-3">
++        <c-col lg="7" md="9" xl="6">
++          <c-card class="mx-4">
++            <c-card-body class="p-4">
++              <form cForm [formGroup]="form" class="customAlign">
++                <h3>Update Product</h3>
++                <c-input-group class="mb-3">
++                    <span cInputGroupText>
++                      <svg cIcon [cIcon]="icons.cilPencil"></svg>
++                    </span>
++                    <input
++                      formControlName="name" 
++                      autoComplete="name" 
++                      cFormControl 
++                      placeholder="Product Name" />
++                    </c-input-group>
++                    <c-input-group class="mb-3">
++                      <span cInputGroupText>
++                        <svg cIcon [cIcon]="icons.cilPencil"></svg>
++                      </span>
++  <input
++                      formControlName="description" 
++                      autoComplete="description" 
++                      cFormControl 
++                      placeholder="Product Description" />
++                    </c-input-group>
++                        <c-input-group class="mb-3">
++                        <span cInputGroupText>
++                          <svg cIcon [cIcon]="icons.cilPencil"></svg>
++                        </span>
++    <input
++                      formControlName="price" 
++                      autoComplete="price"
++                      type="number"
++                      min="0"
++                      cFormControl 
++                      placeholder="Product Price" /></c-input-group>
++                <div class="d-grid">
++                    <button 
++                    (click)="updateProduct()"
++                    class="customButton" 
++                    cButton 
++                    color="primary">
++                      Update Product
++                    </button>
++                  </div>
++              </form>
++            </c-card-body>
++          </c-card>
++        </c-col>
++      </c-row>
++    </c-container>
++</div>
+\ No newline at end of file
+diff --git a/Codigo/Frontend/src/app/pages/employee/update-product/update-product.component.ts b/Codigo/Frontend/src/app/pages/employee/update-product/update-product.component.ts
+new file mode 100644
+index 0000000..4dd429f
+--- /dev/null
++++ b/Codigo/Frontend/src/app/pages/employee/update-product/update-product.component.ts
+@@ -0,0 +1,100 @@
++import { Component, OnInit } from "@angular/core";
++import { AbstractControl, FormBuilder, FormControl, FormGroup } from "@angular/forms";
++import { Pharmacy } from "src/app/interfaces/pharmacy";
++import { Role } from "src/app/interfaces/role";
++import { CommonService } from "src/app/services/CommonService";
++import { InvitationRequest } from 'src/app/interfaces/invitation';
++import { InvitationService } from "src/app/services/invitation.service";
++import { PharmacyService } from "src/app/services/pharmacy.service";
++import { RoleService } from "src/app/services/role.service";
++import { cilShortText, cilPencil, cilSync } from '@coreui/icons';
++import { ActivatedRoute, Router } from "@angular/router";
++import { Invitation } from "src/app/interfaces/invitation";
++import { Product, UpdateProductRequest } from "src/app/interfaces/product";
++import { ProductService } from "src/app/services/product.service";
++
++@Component({
++    selector: 'app-update-product',
++    templateUrl: './update-product.component.html',
++    styleUrls: ['./update-product.component.css'],
++})
++
++export class UpdateProductComponent implements OnInit {
++    form: FormGroup | any;
++    products: Product[] = [];
++    currProduct: Product | any = null;
++
++    icons = { cilShortText, cilPencil, cilSync }
++
++    constructor(
++        private fb: FormBuilder,
++        private productService: ProductService,
++        private commonService: CommonService,
++        private route: ActivatedRoute) {
++            this.form = fb.group({
++                name: new FormControl(),
++                description: new FormControl(),
++                price: 0
++            });
++        };
++
++    ngOnInit(): void {
++        this.getProducts();
++
++    }
++
++    getProducts(): void {
++        this.productService
++        .getProducts()
++        .subscribe((p) => {
++            this.products = p;
++            let id = this.route.snapshot.paramMap.get('id');
++            this.currProduct = this.products.find(({id:pId}) => `${pId}` == id);
++            this.form = this.fb.group({
++              name: this.currProduct.name,
++              description: this.currProduct.description,
++              price: this.currProduct.price
++          });
++    })
++    }
++
++    setDetaultName(name: string): void {
++            this.form.controls.name.setValue(name);
++    }
++    setDefaultDescription(description: string): void {
++        this.form.controls.description.setValue(description);
++    }
++    setDetaultPrice(price: string): void {
++        this.form.controls.price.setValue(price);
++    }
++
++    get name(): AbstractControl {
++        return this.form.controls.name;
++    }
++
++    get description(): AbstractControl {
++        return this.form.controls.description;
++    }
++
++    get price(): AbstractControl {
++        return this.form.controls.price;
++    }
++
++    get product_id() {
++        return Number(this.route.snapshot.paramMap.get('id'));;
++    }
++
++    updateProduct(): void {
++        let name = this.name.value ? this.name.value : "";
++        let description = this.description.value ? this.description.value : "";
++        let price = this.price.value ? this.price.value : "";
++        let id = this.product_id;
++
++        let productRequest = new UpdateProductRequest(name, description, price);
++        this.productService.updateProduct(id, productRequest).subscribe((invitation) => {
++            if (invitation){
++                this.commonService.updateToastData("Success updating invitation", 'success', 'Invitation updated.');
++            }
++        });
++    }
++}
+\ No newline at end of file
+diff --git a/Codigo/Frontend/src/app/pages/home/cart/cart.component.html b/Codigo/Frontend/src/app/pages/home/cart/cart.component.html
+index 30213e7..874c960 100644
+--- a/Codigo/Frontend/src/app/pages/home/cart/cart.component.html
++++ b/Codigo/Frontend/src/app/pages/home/cart/cart.component.html
+@@ -16,7 +16,7 @@
+             <thead>
+               <tr>
+                 <th scope="col">#</th>
+-                <th scope="col">Drug</th>
++                <th scope="col">Drug/Product</th>
+                 <th scope="col">Price</th>
+                 <th scope="col">Quantity</th>
+                 <th scope="col">Total</th>
+diff --git a/Codigo/Frontend/src/app/pages/home/cho/cho.component.ts b/Codigo/Frontend/src/app/pages/home/cho/cho.component.ts
+index 2f4406e..dfe988f 100644
+--- a/Codigo/Frontend/src/app/pages/home/cho/cho.component.ts
++++ b/Codigo/Frontend/src/app/pages/home/cho/cho.component.ts
+@@ -7,6 +7,7 @@ import { StorageManager } from '../../../utils/storage-manager';
+ import { PurchaseRequest, PurchaseRequestDetail } from 'src/app/interfaces/purchase';
+ import { CommonService } from '../../../services/CommonService';
+ import { Drug } from 'src/app/interfaces/drug';
++import { Product } from 'src/app/interfaces/product';
+ 
+ @Component({
+   selector: 'app-cho',
+@@ -16,7 +17,7 @@ import { Drug } from 'src/app/interfaces/drug';
+ export class ChoComponent implements OnInit {
+   total: number = 0;
+   email: string = "";
+-  cart: Drug[] = [];
++  cart: Product[] | Drug[] = [];
+ 
+   constructor(
+     public iconSet: IconSetService,
+@@ -40,8 +41,14 @@ export class ChoComponent implements OnInit {
+     let cart = JSON.parse(this.storageManager.getData('cart'));
+     let details : PurchaseRequestDetail[] = [];
+     for (const item of cart) {
+-      let detail = new PurchaseRequestDetail(item.code, item.quantity, item.pharmacy.id);
++      let detail = new PurchaseRequestDetail(item.code, item.quantity, item.pharmacy.id, item.code);
++      if (typeof item.code == 'number') {
++        detail.code = "";
++      } else {
++        detail.productCode = 0
++      }
+       details.push(detail);
++      console.log(details);
+     }
+ 
+     let now = new Date().toISOString();
+@@ -62,6 +69,7 @@ export class ChoComponent implements OnInit {
+ 
+   updateCart(): void {
+     this.cart = JSON.parse(this.storageManager.getData('cart'));
++    console.log(this.cart);
+     if (!this.cart) {
+       this.cart = [];
+       this.storageManager.saveData('cart', JSON.stringify(this.cart));
+diff --git a/Codigo/Frontend/src/app/pages/home/home/home.component.html b/Codigo/Frontend/src/app/pages/home/home/home.component.html
+index ddade1d..698ee34 100644
+--- a/Codigo/Frontend/src/app/pages/home/home/home.component.html
++++ b/Codigo/Frontend/src/app/pages/home/home/home.component.html
+@@ -32,6 +32,31 @@
+             </c-card-body>
+           </c-row>
+         </c-card>
++        <c-card
++        [cBorder]="{top: {color: 'info', width: 3}}"
++        class="mb-3"
++        *ngFor="let product of products">
++          <c-row class="g-0">
++            <c-card-body cCol [md]="8">
++              <h4 cCardTitle>{{ product.name }}</h4>
++              <h5 class="card-subtitle mb-2 text-muted"> 
++                {{ product?.pharmacy?.name ?? "" }}
++              </h5>
++              <h5 class="card-subtitle mb-2 text-muted"> 
++              </h5>
++              <p cCardText> 
++                <b>Description:</b> {{ product.description }} <br>
++                <b>Price:</b> {{ product.price | currency}}
++              </p>
++              <div [ngStyle]="{ 'text-align': 'end' }">
++              <button cButton color="primary" [routerLink]="['/home/productDetail', product.id]">
++                View Details
++                <svg cIcon name="cil-plus"></svg>
++              </button>
++            </div>
++            </c-card-body>
++          </c-row>
++        </c-card>
+       </c-col>
+     </c-row>
+   </c-container>
+diff --git a/Codigo/Frontend/src/app/pages/home/home/home.component.ts b/Codigo/Frontend/src/app/pages/home/home/home.component.ts
+index 9a5bf65..2c5b7cb 100644
+--- a/Codigo/Frontend/src/app/pages/home/home/home.component.ts
++++ b/Codigo/Frontend/src/app/pages/home/home/home.component.ts
+@@ -2,9 +2,11 @@ import { Component, OnInit } from '@angular/core';
+ import { cilCart, cilPlus, cilCompass } from '@coreui/icons';
+ import { IconSetService } from '@coreui/icons-angular';
+ import { Drug } from '../../../interfaces/drug';
++import { Product } from '../../../interfaces/product';
+ import { DrugService } from '../../../services/drug.service';
+ import { CommonService } from '../../../services/CommonService';
+ import { StorageManager } from 'src/app/utils/storage-manager';
++import { ProductService } from 'src/app/services/product.service';
+ 
+ @Component({
+   selector: 'app-home',
+@@ -14,10 +16,12 @@ import { StorageManager } from 'src/app/utils/storage-manager';
+ export class HomeComponent implements OnInit {
+   drugs: Drug[] = [];
+   cart: Drug[] = [];
++  products: Product[] = [];
+   
+   constructor(
+     public iconSet: IconSetService,
+     private drugService: DrugService,
++    private productService: ProductService,
+     private commonService: CommonService,
+     private storageManager: StorageManager) {
+     iconSet.icons = { cilCart, cilPlus, cilCompass };
+@@ -30,6 +34,7 @@ export class HomeComponent implements OnInit {
+   ngOnInit(): void {
+     this.updateCart();
+     this.getDrugs();
++    this.getProducts();
+     this.storageManager.saveData('total', JSON.stringify(0));
+   }
+ 
+@@ -38,6 +43,11 @@ export class HomeComponent implements OnInit {
+     .subscribe(drugs => this.drugs = drugs);
+   }
+ 
++  getProducts(): void {
++    this.productService.getProducts()
++    .subscribe(products => this.products = products);
++  }
++
+   updateCart(): void {
+     this.cart = JSON.parse(this.storageManager.getData('cart'));
+     if (!this.cart) {
+diff --git a/Codigo/Frontend/src/app/pages/home/productDetail/productDetail.component.css b/Codigo/Frontend/src/app/pages/home/productDetail/productDetail.component.css
+new file mode 100644
+index 0000000..14737e2
+--- /dev/null
++++ b/Codigo/Frontend/src/app/pages/home/productDetail/productDetail.component.css
+@@ -0,0 +1,3 @@
++.customQuantity{
++    width: 180px;
++}
+\ No newline at end of file
+diff --git a/Codigo/Frontend/src/app/pages/home/productDetail/productDetail.component.html b/Codigo/Frontend/src/app/pages/home/productDetail/productDetail.component.html
+new file mode 100644
+index 0000000..b65c2b5
+--- /dev/null
++++ b/Codigo/Frontend/src/app/pages/home/productDetail/productDetail.component.html
+@@ -0,0 +1,59 @@
++<c-header class="customBody">
++  <app-custom-header
++    [icons]="true"
++    [select]="false"
++    [search]="false"
++    [ngStyle]="{ width: '100%' }"
++  >
++  </app-custom-header>
++  <c-header-divider></c-header-divider>
++  <c-container>
++    <c-row>
++      <c-col>
++        <div *ngIf="product">
++          <c-card [cBorder]="{ top: { color: 'info', width: 3 } }" class="mb-3">
++            <c-row class="g-0">
++              <c-col [md]="4">
++                <img [cCardImg] src="assets/img/not_found.png" />
++              </c-col>
++              <c-card-body cCol [md]="8">
++                <h4 cCardTitle>{{ product.name }}</h4>
++                <h5 class="card-subtitle mb-2 text-muted">
++                  {{ product?.pharmacy?.name ?? "" }}
++                </h5>
++                <p cCardText>
++                  <b>Code:</b> {{ product.code }} <br />
++                  <b>Price:</b> {{ product.price | currency }} <br />
++                  <b>Description:</b> {{ product.description }} <br />
++                </p>
++
++                <div [ngStyle]="{ 'text-align': 'end' }">
++                  <c-input-group class="mb-3 customQuantity">
++                    <label cInputGroupText for="quantityInput">
++                      Quantity
++                    </label>
++                    <input
++                      cFormControl
++                      [(ngModel)]="quantity"
++                      id="quantityInput"
++                      value="1"
++                      min="1"
++                      type="number"
++                    />
++                  </c-input-group>
++
++                  <button cButton color="primary" (click)="addToCart(product)">
++                    Add to cart
++                    <svg cIcon name="cil-cart"></svg>
++                  </button>
++                </div>
++              </c-card-body>
++            </c-row>
++          </c-card>
++        </div>
++      </c-col>
++    </c-row>
++  </c-container>
++
++  <app-custom-footer class="bottomFooter"></app-custom-footer>
++</c-header>
+diff --git a/Codigo/Frontend/src/app/pages/home/productDetail/productDetail.component.ts b/Codigo/Frontend/src/app/pages/home/productDetail/productDetail.component.ts
+new file mode 100644
+index 0000000..78218b7
+--- /dev/null
++++ b/Codigo/Frontend/src/app/pages/home/productDetail/productDetail.component.ts
+@@ -0,0 +1,73 @@
++import { Component, OnInit} from '@angular/core';
++import { cilCart, cilPlus, cilCompass } from '@coreui/icons';
++import { IconSetService } from '@coreui/icons-angular';
++import { ActivatedRoute } from '@angular/router';
++import { Product } from 'src/app/interfaces/product';
++import { StorageManager } from '../../../utils/storage-manager';
++import { Router } from '@angular/router'; 
++import { CommonService } from '../../../services/CommonService';
++import { ProductService } from 'src/app/services/product.service';
++
++@Component({
++  selector: 'app-product-detail',
++  templateUrl: './productDetail.component.html',
++  styleUrls: ['./productDetail.component.css'],
++})
++export class ProductDetailComponent implements OnInit {
++  product: Product | undefined;
++  quantity: number = 1;
++  cart: any[] = [];
++
++  constructor(
++    private route: ActivatedRoute,
++    public iconSet: IconSetService,
++    private productService: ProductService,
++    private storageManager: StorageManager,
++    private router: Router,
++    private commonService: CommonService
++  ) {
++    iconSet.icons = { cilCart, cilPlus, cilCompass };
++  }
++
++  ngOnInit(): void {
++    this.getProduct();
++    this.storageManager.saveData('total', JSON.stringify(0));
++  }
++
++  getProduct(): void {
++    const id = parseInt(this.route.snapshot.paramMap.get('id')!, 10);
++    this.productService.getProducts()
++      .subscribe(products => this.product = products.find(({id: currId}) => currId === id));
++  }
++
++  addToCart(product: Product) {
++    if (product) {
++      this.cart = JSON.parse(this.storageManager.getData('cart'));
++      if (!this.cart) {
++        this.cart = [];
++        this.storageManager.saveData('cart', JSON.stringify(this.cart));
++      }
++      
++      let exist: boolean = false;
++      for (let item of this.cart) {
++        if (item.code === product.code && item.id === product.id){
++          item.quantity += this.quantity;
++          exist = true;
++          break;
++        }
++      }
++      if (!exist){
++        product.quantity = this.quantity;
++        this.cart.push(product);
++      }
++      this.storageManager.saveData('cart', JSON.stringify(this.cart));
++    }
++    this.updateHeader(this.cart.length);
++    this.router.navigate(['/home/cart']);
++  }
++
++  updateHeader(value: number){
++    this.commonService.updateHeaderData(value);
++   }
++
++}
+diff --git a/Codigo/Frontend/src/app/services/product.service.ts b/Codigo/Frontend/src/app/services/product.service.ts
+new file mode 100644
+index 0000000..319cfaa
+--- /dev/null
++++ b/Codigo/Frontend/src/app/services/product.service.ts
+@@ -0,0 +1,86 @@
++import { Injectable } from '@angular/core';
++import { HttpClient, HttpHeaders } from '@angular/common/http';
++import { Observable, of } from 'rxjs';
++import { catchError, tap } from 'rxjs/operators';
++import { Product, ProductRequest, UpdateProductRequest } from '../interfaces/product';
++import { environment } from '../../environments/environment';
++import { CommonService } from './CommonService';
++import { StorageManager } from '../utils/storage-manager';
++
++@Injectable({ providedIn: 'root' })
++export class ProductService {
++
++  private url = environment.apiUrl + '/api/products';
++
++  constructor(
++    private http: HttpClient,
++    private commonService: CommonService,
++    private storageManager: StorageManager) { }
++
++  getHttpHeaders(): HttpHeaders {
++    let login = JSON.parse(this.storageManager.getLogin());
++    let token = login ? login.token : "";
++    
++    return new HttpHeaders()
++      .set('Content-Type', 'application/json')
++      .set('Authorization', token);
++  }
++
++  getProducts(): Observable<Product[]> {
++    return this.http.get<Product[]>(this.url, {headers: this.getHttpHeaders() })
++      .pipe(
++        tap(),
++        catchError(this.handleError<Product[]>('Get Products', []))
++      );
++  }
++
++  createDrug(drug: ProductRequest): Observable<Product> {
++    return this.http.post<Product>(this.url, drug, {headers: this.getHttpHeaders() })
++    .pipe(
++      tap(),
++      catchError(this.handleError<Product>('Create Product'))
++    );
++  }
++
++  deleteProduct(id: number): Observable<any> {
++    const url = `${this.url}/${id}`;
++    return this.http.delete<any>(url, {headers: this.getHttpHeaders() })
++    .pipe(
++      tap(),
++      catchError(this.handleError<any>('Delete Drug'))
++    );
++  }
++
++  updateProduct(id: number, product: UpdateProductRequest): Observable<Product> {
++    const url = `${this.url}/${id}`;
++    return this.http.put<Product>(url, product, {headers: this.getHttpHeaders() }).pipe(
++      tap(),
++      catchError(this.handleError<Product>('Update Product'))
++    );
++  }
++  /**
++   * Handle Http operation that failed.
++   * Let the app continue.
++   *
++   * @param operation - name of the operation that failed
++   * @param result - optional value to return as the observable result
++   */
++  private handleError<T>(operation = 'operation', result?: T) {
++    return (error: any): Observable<T> => {
++
++      // TODO: send the error to remote logging infrastructure
++      //console.error(error); // log to console instead
++
++      // TODO: better job of transforming error for user consumption
++      this.log(`${operation} failed: ${error.error.message}`);
++
++      // Let the app keep running by returning an empty result.
++      return of(result as T);
++    };
++  }
++
++  /** Log a ProductService error with the MessageService */
++  private log(message: string) {
++    this.commonService.updateToastData(message, "danger", "Error");
++  }
++}
