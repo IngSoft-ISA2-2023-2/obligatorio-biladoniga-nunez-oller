@@ -1031,7 +1031,7 @@
       "command": "assertText",
       "target": "css=span:nth-child(1)",
       "targets": [],
-      "value": "Drug deleted. Success deleting drug \"31231 - 123123\""
+      "value": "Drug deleted. Success deleting drug \"59595 - product1\""
     }]
   }, {
     "id": "bc096bc9-8910-4003-942a-13de650c22fb",
